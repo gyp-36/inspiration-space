@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: inspiration-space
+
+  profiles:
+    active: dev
+  web:
+    resources:
+      add-mappings: false
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
+
+jwt:
+  tokenHeader: Authorization
+  tokenHead: Bearer
+
+
+
+server:
+  port: 8080
+  compression:
+    enabled: true
+    mime-types: text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json
+
+# 监控端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,beans
+  endpoint:
+    health:
+      show-details: always
+
+# 日志配置
+#数据库连接池配置
