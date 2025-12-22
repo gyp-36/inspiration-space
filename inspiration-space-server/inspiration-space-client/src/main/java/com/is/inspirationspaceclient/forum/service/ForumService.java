@@ -10,9 +10,11 @@ public interface ForumService {
 
     Boolean deletePost(Long postId);
 
-    Page<PostSimpleVo> getAllPosts(String sort, int page, int size);
+    Page<PostSimpleVo> getAllPosts(String token, String sort, String keyword, int page, int size);
+    
+    Page<PostSimpleVo> getCollectedPosts(String token, int page, int size);
 
-    PostDetailVo getPostDetail(Long postId);
+    PostDetailVo getPostDetail(String token, Long postId);
 
     Boolean like(String token, Long postId);
 
@@ -25,4 +27,8 @@ public interface ForumService {
     Boolean uncollect(String token, Long postId);
 
     Boolean createPost(String token, ForumCreateDto forumCreateDto);
+
+    String uploadImage(String token, org.springframework.web.multipart.MultipartFile file);
+
+    void updatePostStatsAsync(Long postId, String field, int delta);
 }

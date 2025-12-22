@@ -150,7 +150,9 @@ export class ChatWebSocket {
   connect(token) {
     return new Promise((resolve, reject) => {
       try {
-        this.ws = new WebSocket(`ws://localhost:8080/client/ws?token=${token}`)
+        // 确保 token 被正确编码，特别是包含 "Bearer " 前缀时
+        const encodedToken = encodeURIComponent(token)
+        this.ws = new WebSocket(`ws://localhost:8080/client/ws?token=${encodedToken}`)
         
         this.ws.onopen = () => {
           console.log('WebSocket连接已建立')

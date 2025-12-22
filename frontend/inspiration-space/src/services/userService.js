@@ -46,4 +46,19 @@ export const updateAvatar = (userId, formData) => {
   return privateApiCall(`/user/updateAvatar/${userId}`, 'POST', formData);
 };
 
+// 关注操作 (假设路径，待后端实现)
+export const followUser = (userId) => 
+  privateApiCall(`/user/follow/${userId}`, 'POST');
+
+export const unfollowUser = (userId) => 
+  privateApiCall(`/user/unfollow/${userId}`, 'POST');
+
+// 检查是否关注
+export const checkFollowStatus = (userId) =>
+  privateApiCall(`/user/isFollowing/${userId}`, 'GET');
+
+// 获取用户排行榜
+export const getUserRanking = (topN = 10) =>
+  publicApiCall(`/user/ranking?topN=${topN}`, 'GET');
+
 

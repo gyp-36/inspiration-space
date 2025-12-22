@@ -14,10 +14,16 @@ public class CorsConfig {
     @Bean
     public CorsConfigurationSource customcorsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        // 允许的源，使用 patterns 以支持 credentials
+        configuration.setAllowedOriginPatterns(Arrays.asList("http://localhost:*", "http://127.0.0.1:*"));
+        // 允许的方法
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+        // 允许的头
         configuration.setAllowedHeaders(Arrays.asList("*"));
+        // 允许携带凭证（如 Cookie, Authorization 头）
         configuration.setAllowCredentials(true);
+        // 预检请求的有效期（秒）
+        configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

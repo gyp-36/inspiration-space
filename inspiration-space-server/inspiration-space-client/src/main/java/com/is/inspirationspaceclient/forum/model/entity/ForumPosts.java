@@ -16,7 +16,7 @@ import java.util.List;
  */
 @Data
 @Accessors(chain = true)
-@TableName("forum_posts")
+@TableName(value = "forum_posts",autoResultMap = true)
 public class ForumPosts {
     
     /**

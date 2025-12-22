@@ -15,6 +15,9 @@ public class WorkAttachmentVo implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
+    @Schema(name = "id", type = "Long", description = "附件ID")
+    private Long id;
+
     @Schema(name = "file_name", type = "String", description = "文件名")
     private String fileName;
 

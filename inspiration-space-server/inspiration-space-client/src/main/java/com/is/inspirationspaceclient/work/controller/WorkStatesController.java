@@ -4,6 +4,7 @@ package com.is.inspirationspaceclient.work.controller;
 import com.is.inspirationspaceclient.work.model.vo.WorkStateVo;
 import com.is.inspirationspaceclient.work.service.WorkStateService;
 import com.is.inspirationspacecommon.util.ApiResponse;
+import com.is.inspirationspacecommon.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,22 +21,34 @@ public class WorkStatesController {
 
     @Operation(summary = "增加作品浏览數")
     @PostMapping("/{workId}/view")
-    public ApiResponse<Void> incrementViewCount(@PathVariable Long workId) {
-        workStateService.incrementViewCount(workId);
+    public ApiResponse<Void> incrementViewCount(
+            @PathVariable Long workId,
+            @RequestHeader(value = "Authorization", required = false) String token) {
+        Long userId = null;
+        if (token != null && !token.isEmpty()) {
+            userId = JwtUtil.getUserIdFromToken(token);
+        }
+        workStateService.incrementViewCount(workId, userId);
         return ApiResponse.ok();
     }
 
-    @Operation(summary = "增加作品点赞数")
-    @PostMapping("/{workId}/like")
-    public ApiResponse<Void> incrementLikeCount(@PathVariable Long workId) {
-        workStateService.incrementLikeCount(workId);
+    @Operation(summary = "切换作品点赞状态")
+    @PostMapping("/{workId}/toggle-like")
+    public ApiResponse<Void> toggleLikeCount(
+            @PathVariable Long workId,
+            @RequestHeader("Authorization") String token) {
+        Long userId = JwtUtil.getUserIdFromToken(token);
+        workStateService.toggleLike(workId, userId);
         return ApiResponse.ok();
     }
 
-    @Operation(summary = "增加作品收藏数")
-    @PostMapping("/{workId}/collect")
-    public ApiResponse<Void> incrementCollectCount(@PathVariable Long workId) {
-        workStateService.incrementCollectCount(workId);
+    @Operation(summary = "切换作品收藏状态")
+    @PostMapping("/{workId}/toggle-collect")
+    public ApiResponse<Void> toggleCollectCount(
+            @PathVariable Long workId,
+            @RequestHeader("Authorization") String token) {
+        Long userId = JwtUtil.getUserIdFromToken(token);
+        workStateService.toggleCollect(workId, userId);
         return ApiResponse.ok();
     }
     @Operation(summary = "增加作品评论数")

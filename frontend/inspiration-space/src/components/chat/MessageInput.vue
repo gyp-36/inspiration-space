@@ -6,25 +6,17 @@
       <div class="left-tools">
         <el-tooltip content="表情" placement="top">
           <el-button link class="tool-btn" @click="showEmoji = !showEmoji">
-            <el-icon><Menu /></el-icon>
-          </el-button>
-        </el-tooltip>
-        
-        <el-tooltip content="图片" placement="top">
-          <el-button link class="tool-btn" @click="triggerImageSelect">
-            <el-icon><Picture /></el-icon>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
+            </svg>
           </el-button>
         </el-tooltip>
         
         <el-tooltip content="文件" placement="top">
           <el-button link class="tool-btn" @click="triggerFileSelect">
-            <el-icon><FolderOpened /></el-icon>
-          </el-button>
-        </el-tooltip>
-        
-        <el-tooltip content="语音消息" placement="top">
-          <el-button link class="tool-btn" @click="toggleRecording">
-            <el-icon :class="{ 'recording-icon': isRecording }"><Microphone /></el-icon>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+              <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>
+            </svg>
           </el-button>
         </el-tooltip>
       </div>
@@ -42,25 +34,25 @@
         ref="textareaRef"
         v-model="localMessage"
         class="message-textarea"
-        placeholder="请输入内容，回车发送 (Ctrl+Enter 换行)..."
-        :rows="1"
+        placeholder="请输入内容..."
+        :rows="3"
         @keydown="handleKeyDown"
         @input="adjustHeight"
         @paste="handlePaste"
       ></textarea>
       
-      <el-button 
-        type="primary" 
-        class="send-btn" 
-        :disabled="!canSend"
-        @click="handleSend"
-      >
-        发送
-      </el-button>
+      <div class="send-action">
+        <button 
+          class="send-btn-new" 
+          :disabled="!canSend"
+          @click="handleSend"
+        >
+          发送(S)
+        </button>
+      </div>
     </div>
 
     <!-- 隐藏的文件选择 -->
-    <input type="file" ref="imageInput" hidden accept="image/*" @change="onFileChange($event, 'IMAGE')" />
     <input type="file" ref="fileInput" hidden @change="onFileChange($event, 'FILE')" />
 
     <!-- 表情选择器弹窗 -->
@@ -74,20 +66,6 @@
         >
           {{ emoji }}
         </span>
-      </div>
-    </div>
-
-    <!-- 录音状态 -->
-    <div v-if="isRecording" class="recording-overlay">
-      <div class="recording-content">
-        <div class="recording-wave">
-          <span></span><span></span><span></span><span></span><span></span>
-        </div>
-        <div class="recording-text">正在录音...</div>
-        <div class="recording-actions">
-          <el-button type="danger" circle icon="Close" @click="cancelRecording" />
-          <el-button type="success" circle icon="Check" @click="finishRecording" />
-        </div>
       </div>
     </div>
   </div>
@@ -113,7 +91,6 @@ const emit = defineEmits(['update:modelValue', 'send', 'file-select'])
 // 状态
 const localMessage = ref('')
 const showEmoji = ref(false)
-const isRecording = ref(false)
 const textareaRef = ref(null)
 const imageInput = ref(null)
 const fileInput = ref(null)
@@ -148,7 +125,7 @@ const adjustHeight = () => {
   if (!textareaRef.value) return
   textareaRef.value.style.height = 'auto'
   const scrollHeight = textareaRef.value.scrollHeight
-  textareaRef.value.style.height = Math.min(scrollHeight, 150) + 'px'
+  textareaRef.value.style.height = Math.max(100, Math.min(scrollHeight, 200)) + 'px'
 }
 
 const handleKeyDown = (e) => {
@@ -190,17 +167,11 @@ const insertEmoji = (emoji) => {
   })
 }
 
-const triggerImageSelect = () => imageInput.value.click()
 const triggerFileSelect = () => fileInput.value.click()
 
 const onFileChange = (e, type) => {
   const file = e.target.files[0]
   if (!file) return
-  
-  if (type === 'IMAGE' && !file.type.startsWith('image/')) {
-    ElMessage.error('请选择图片文件')
-    return
-  }
   
   if (file.size > 10 * 1024 * 1024) {
     ElMessage.error('文件大小不能超过10MB')
@@ -226,26 +197,6 @@ const handlePaste = (e) => {
   }
 }
 
-// 录音相关
-const toggleRecording = () => {
-  if (isRecording.value) {
-    finishRecording()
-  } else {
-    isRecording.value = true
-    ElMessage.info('开始录音...')
-  }
-}
-
-const cancelRecording = () => {
-  isRecording.value = false
-  ElMessage.info('已取消录音')
-}
-
-const finishRecording = () => {
-  isRecording.value = false
-  ElMessage.success('录音已发送 (演示)')
-}
-
 // 指令
 const vClickOutside = {
   mounted(el, binding) {
@@ -269,45 +220,43 @@ onMounted(() => {
 
 <style scoped>
 .message-input-container {
-  padding: 12px 16px;
-  background-color: #fff;
-  border-top: 1px solid #f0f0f0;
+  padding: 8px 16px 12px;
+  background-color: #1a1a1a;
+  border-top: 1px solid #2d2d2d;
   position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .left-tools {
   display: flex;
-  gap: 8px;
+  gap: 12px;
 }
 
 .tool-btn {
   font-size: 20px;
-  color: #606266;
-  padding: 4px;
+  color: #a0a0a0;
+  padding: 6px;
   transition: all 0.2s;
+  height: auto;
 }
 
 .tool-btn:hover {
-  color: #409eff;
-  background-color: #f5f7fa;
+  color: #ffffff;
+  background-color: #333333;
   border-radius: 4px;
-}
-
-.recording-icon {
-  color: #f56c6c;
-  animation: pulse 1.5s infinite;
 }
 
 .char-count {
   font-size: 12px;
-  color: #909399;
+  color: #666;
 }
 
 .char-count.over-limit {
@@ -316,34 +265,53 @@ onMounted(() => {
 
 .input-area {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .message-textarea {
-  flex: 1;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  padding: 8px 12px;
+  width: 100%;
+  border: none;
+  background-color: transparent;
+  color: #e0e0e0;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   resize: none;
-  max-height: 150px;
-  min-height: 36px;
+  min-height: 100px;
+  max-height: 200px;
   outline: none;
+  padding: 4px 0;
+}
+
+.message-textarea::placeholder {
+  color: #555;
+}
+
+.send-action {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.send-btn-new {
+  background-color: #2b2b2b;
+  color: #666;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
   transition: all 0.2s;
-  background-color: #f5f7fa;
 }
 
-.message-textarea:focus {
-  border-color: #409eff;
-  background-color: #fff;
+.send-btn-new:not(:disabled):hover {
+  background-color: #3d3d3d;
+  color: #fff;
 }
 
-.send-btn {
-  padding: 0 20px;
-  height: 36px;
-  border-radius: 8px;
+.send-btn-new:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* 表情选择器 */
@@ -351,12 +319,12 @@ onMounted(() => {
   position: absolute;
   bottom: 100%;
   left: 16px;
-  background: #fff;
-  border: 1px solid #e4e7ed;
+  background: #252525;
+  border: 1px solid #333;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  width: 300px;
   padding: 12px;
-  width: 320px;
   z-index: 100;
   margin-bottom: 8px;
 }
@@ -367,6 +335,15 @@ onMounted(() => {
   gap: 8px;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.emoji-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.emoji-list::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 2px;
 }
 
 .emoji-item {
@@ -381,84 +358,6 @@ onMounted(() => {
 }
 
 .emoji-item:hover {
-  background-color: #f5f7fa;
-}
-
-/* 录音蒙层 */
-.recording-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(255,255,255,0.95);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-}
-
-.recording-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-}
-
-.recording-wave {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 30px;
-}
-
-.recording-wave span {
-  width: 4px;
-  height: 100%;
-  background-color: #409eff;
-  border-radius: 2px;
-  animation: wave 1s infinite ease-in-out;
-}
-
-.recording-wave span:nth-child(2) { animation-delay: 0.2s; }
-.recording-wave span:nth-child(3) { animation-delay: 0.4s; }
-.recording-wave span:nth-child(4) { animation-delay: 0.6s; }
-.recording-wave span:nth-child(5) { animation-delay: 0.8s; }
-
-@keyframes wave {
-  0%, 100% { transform: scaleY(0.4); }
-  50% { transform: scaleY(1); }
-}
-
-@keyframes pulse {
-  0% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.2); opacity: 0.7; }
-  100% { transform: scale(1); opacity: 1; }
-}
-
-.recording-text {
-  font-size: 14px;
-  color: #606266;
-}
-
-.recording-actions {
-  display: flex;
-  gap: 20px;
-}
-
-/* 响应式 */
-@media (max-width: 768px) {
-  .message-input-container {
-    padding: 8px 12px;
-  }
-  
-  .emoji-picker {
-    width: 280px;
-    left: 8px;
-  }
-  
-  .emoji-list {
-    grid-template-columns: repeat(7, 1fr);
-  }
+  background: #333;
 }
 </style>

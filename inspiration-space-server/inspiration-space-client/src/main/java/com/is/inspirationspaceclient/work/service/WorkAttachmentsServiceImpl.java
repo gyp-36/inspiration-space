@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -59,12 +60,24 @@ public class WorkAttachmentsServiceImpl implements WorkAttachmentsService {
         Long userId = JwtUtil.getUserIdFromToken(token);
         if (userId == null) throw new IsArgumentException("无效token");
 
-        // 2. 上传文件到MinIO（普通附件独立存储路径）
-        String bucketName = "attachments";
-        String objectKey = "attachments/" + UUID.randomUUID() + "-" + file.getOriginalFilename();
+        // 2. 验证作品是否存在且属于当前用户
+        WorkInfo workInfo = workInfoMapper.selectById(workId);
+        if (workInfo == null) {
+            throw new IsArgumentException(ErrorCode.WORK_NOT_FOUND.getHttpStatusCode(), "作品不存在");
+        }
+        if (!workInfo.getCreatorId().equals(userId)) {
+            throw new IsArgumentException(ErrorCode.PERMISSION_DENIED.getHttpStatusCode(), "无权操作非本人作品");
+        }
+
+        // 3. 构造新的文件名：work-attachment_{postId}_{userId}_时间戳.扩展名
+        String fileExtension = FilenameUtils.getExtension(file.getOriginalFilename());
+        String objectKey = "work-attachment/work-attachment_" + workId + "_" + userId + "_" + Instant.now().toEpochMilli() + "." + fileExtension;
+        
+        // 4. 上传文件到MinIO（普通附件独立存储路径）
+        String bucketName = "work";
         storageService.upload(file, bucketName, objectKey);
 
-        // 3. 计算文件哈希
+        // 5. 计算文件哈希
         String fileHash;
         try {
             fileHash = DigestUtils.sha256Hex(file.getInputStream());
@@ -72,14 +85,15 @@ public class WorkAttachmentsServiceImpl implements WorkAttachmentsService {
             throw new IsArgumentException("文件处理失败");
         }
 
-        // 4. 生成业务ID（雪花ID）
+        // 6. 生成业务ID（雪花ID）
         Long attachmentId = snowflakeIdGenerator.nextId();
 
-        // 5. 保存附件元数据到 work_attachment 表（此时work_id仍为空）
+        // 7. 保存附件元数据到 work_attachment 表
         WorkAttachment attachment = new WorkAttachment();
         attachment.setId(attachmentId);
+        attachment.setWorkId(workId); // 设置作品ID，防止数据库非空约束报错
         attachment.setFileName(file.getOriginalFilename());
-        attachment.setFileExtension(FilenameUtils.getExtension(file.getOriginalFilename()));
+        attachment.setFileExtension(fileExtension);
         attachment.setFileType(file.getContentType());
         attachment.setFileSize(file.getSize());
         attachment.setFileHash(fileHash);
@@ -87,11 +101,12 @@ public class WorkAttachmentsServiceImpl implements WorkAttachmentsService {
         attachment.setObjectKey(objectKey);
         workAttachmentsMapper.insert(attachment);
 
-        //6. 返回附件基础数据
+        //8. 返回附件基础数据
         WorkAttachmentVo workAttachmentVo = new WorkAttachmentVo();
+        workAttachmentVo.setId(attachmentId); // 返回ID给前端
         workAttachmentVo.setFileName(file.getOriginalFilename());
         workAttachmentVo.setFileSize(file.getSize());
-        workAttachmentVo.setFileExtension(FilenameUtils.getExtension(file.getOriginalFilename()));
+        workAttachmentVo.setFileExtension(fileExtension);
         return workAttachmentVo;
     }
 

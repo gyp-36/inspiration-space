@@ -1,5 +1,6 @@
 package com.is.inspirationspaceclient.user.model.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -8,6 +9,7 @@ import java.io.Serial;
 import java.io.Serializable;
 
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 @Schema(title = "UserRegisterDto", description = "用户注册")
 public class UserRegisterDto implements Serializable {
 

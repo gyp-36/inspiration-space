@@ -15,6 +15,8 @@ import org.springframework.context.annotation.Role;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.List;
+
 
 /**
  * 用户表 前端控制器
@@ -114,8 +116,27 @@ public class UserController {
         return ApiResponse.ok(userService.updateAvatar(userId, avatar));
     }
 
+    @Operation(summary = "关注用户")
+    @PostMapping("/follow/{userId}")
+    public ApiResponse<Boolean> followUser(@PathVariable Long userId) {
+        return ApiResponse.ok(userService.followUser(userId));
+    }
 
+    @Operation(summary = "取消关注用户")
+    @PostMapping("/unfollow/{userId}")
+    public ApiResponse<Boolean> unfollowUser(@PathVariable Long userId) {
+        return ApiResponse.ok(userService.unfollowUser(userId));
+    }
 
+    @Operation(summary = "是否已关注用户")
+    @GetMapping("/isFollowing/{userId}")
+    public ApiResponse<Boolean> isFollowing(@PathVariable Long userId) {
+        return ApiResponse.ok(userService.isFollowing(userId));
+    }
 
-
+    @Operation(summary = "获取用户排行榜")
+    @GetMapping("/ranking")
+    public ApiResponse<List<UserVo>> getUserRanking(@RequestParam(defaultValue = "10") int topN) {
+        return ApiResponse.ok(userService.getUserRanking(topN));
+    }
 }

@@ -1,5 +1,6 @@
 package com.is.inspirationspaceclient.chat.model.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.is.inspirationspaceclient.chat.model.entity.enums.IsApproval;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;
@@ -11,6 +12,7 @@ import java.util.List;
 
 @Data
 @Schema(description = "创建群聊请求参数")
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class CreateGroupRequestDto implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;

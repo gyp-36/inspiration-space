@@ -1,103 +1,143 @@
 <template>
-  <div class="post-card" @click="handleCardClick">
-    <!-- 头部：用户信息 -->
-    <div class="post-header">
-      <div class="user-section">
-        <!-- 用户头像 -->
-        <div class="avatar-wrapper" @click.stop="navigateToUser">
-          <img 
-            v-if="user.avatar" 
-            :src="user.avatar" 
-            class="avatar" 
-            alt="用户头像"
-            @error="handleAvatarError"
-          >
-          <div v-else class="avatar-placeholder">
-            {{ user.username ? user.username.charAt(0).toUpperCase() : 'U' }}
-          </div>
+  <div 
+    class="post-card" 
+    :class="{ 
+      'no-images': !imageUrls || imageUrls.length === 0,
+      'no-product': !productUrl,
+      'pure-text': (!imageUrls || imageUrls.length === 0) && !productUrl
+    }"
+    @click="handleCardClick"
+  >
+    <!-- 顶部：头像 + 用户名 + 时间 -->
+    <div class="card-header">
+      <div class="user-info" @click.stop="handleAvatarClick">
+        <img 
+          v-if="user.avatar" 
+          :src="user.avatar" 
+          class="user-avatar" 
+          :title="user.username"
+        >
+        <div v-else class="user-avatar-placeholder">
+          {{ user.username ? user.username.charAt(0).toUpperCase() : 'U' }}
         </div>
-        
-        <!-- 用户信息 -->
-        <div class="user-info">
-          <h3 class="username" @click.stop="navigateToUser">{{ user.username || '加载中...' }}</h3>
-          <span class="post-date">{{ formattedDate }}</span>
+        <div class="user-meta">
+          <span class="username">{{ user.username || '匿名用户' }}</span>
+          <span class="publish-time">{{ formattedDate }}</span>
         </div>
       </div>
-      
-      <!-- 标题在用户信息下方 -->
+    </div>
+
+    <!-- 中部内容区：标题 + 内容 + 图片 + 链接 -->
+    <div class="post-body">
       <h2 class="post-title">{{ title }}</h2>
-    </div>
-    
-    <!-- 内容区域 -->
-    <div class="post-content">
-      <p class="content-text">{{ shortContent }}</p>
-      <a v-if="link" :href="link" class="post-link" target="_blank">{{ formatLink(link) }}</a>
-    </div>
-    
-    <!-- 底部统计信息 -->
-    <div class="post-footer">
-      <div class="views">
-        <el-icon><View /></el-icon> {{ views }}
+      <p class="post-content">{{ shortContent }}</p>
+
+      <!-- 图片展示 (最多3张) -->
+      <div v-if="imageUrls && imageUrls.length > 0" class="post-images">
+        <div 
+          v-for="(url, index) in imageUrls.slice(0, 3)" 
+          :key="index"
+          class="image-item"
+          :class="{ 'single-image': imageUrls.length === 1 }"
+        >
+          <el-image 
+            :src="url" 
+            fit="cover" 
+            :preview-src-list="imageUrls"
+            :initial-index="index"
+            preview-teleported
+            loading="lazy"
+          />
+        </div>
       </div>
-      <div class="stats">
-        <span @click.stop="handleToggleLike" class="stat-item like" :class="{ active: localIsLiked }">
-          <span class="icon-text">{{ localIsLiked ? '❤️' : '🤍' }} {{ localLikes }}</span>
-        </span>
-        <span @click.stop="handleToggleFavorite" class="stat-item favorite" :class="{ active: localIsFavorited }">
-          <el-icon><StarFilled v-if="localIsFavorited" /><Star v-else /></el-icon>
-          {{ localFavorites }}
-        </span>
-        <span @click.stop="handleToggleComments" class="stat-item comment">
-          <el-icon><ChatDotRound /></el-icon>
-          {{ commentCount || '评论' }}
-          <el-icon class="dropdown-icon" :class="{ rotated: showComments }"><CaretBottom /></el-icon>
-        </span>
-        <span @click.stop="handleRepost" class="stat-item share">
-          <el-icon><Share /></el-icon> {{ localShares }}
-        </span>
-      </div>
-    </div>
-    
-    <!-- 评论区展开 -->
-    <div v-if="showComments" class="comments-section" @click.stop>
-      <div class="comments-placeholder">
-        <p>评论区暂未开放</p>
+
+      <!-- 商品链接展示 -->
+      <div v-if="productUrl" class="product-link-wrapper" @click.stop="handleProductClick">
+        <div class="product-link-card">
+          <el-icon class="link-icon"><LinkIcon /></el-icon>
+          <span class="link-text">{{ productUrl }}</span>
+          <el-icon class="arrow-icon"><ArrowRight /></el-icon>
+        </div>
       </div>
     </div>
-    
-    <!-- 用户信息加载状态指示器 -->
-    <div v-if="isLoadingUser" class="user-loading">
-      <div class="skeleton-avatar"></div>
-      <div class="skeleton-username"></div>
+
+    <!-- 分割线 -->
+    <div v-if="!hideFooter" class="card-divider"></div>
+
+    <!-- 底部：交互统计项 -->
+    <div v-if="!hideFooter" class="card-footer">
+      <div 
+        class="footer-item action-item" 
+        :class="{ active: localIsLiked }"
+        @click.stop="handleToggleLike"
+      >
+        <el-icon><Pointer /></el-icon>
+        <span class="count">{{ localLikes }}</span>
+      </div>
+
+      <div 
+        class="footer-item action-item" 
+        :class="{ active: localIsFavorited }"
+        @click.stop="handleToggleFavorite"
+      >
+        <el-icon v-if="localIsFavorited"><StarFilled /></el-icon>
+        <el-icon v-else><Star /></el-icon>
+        <span class="count">{{ localFavorites }}</span>
+      </div>
+
+      <div class="footer-item">
+        <el-icon><ChatDotRound /></el-icon>
+        <span class="count">{{ commentCount || 0 }}</span>
+      </div>
+
+      <div class="footer-item">
+        <el-icon><View /></el-icon>
+        <span class="count">{{ view }}</span>
+      </div>
+
+      <div 
+        class="footer-item action-item"
+        :class="{ active: localIsReposted }"
+        @click.stop="handleRepost"
+      >
+        <el-icon><Share /></el-icon>
+        <span class="count">{{ localShares }}</span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, onMounted, watch } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { getUserInfo } from '@/services/userService';
 import { 
-  publicApiCall,
-  privateApiCall 
-} from '@/services/apiClient';
-import { 
-  View, 
+  likePost, 
+  unlikePost, 
+  collectPost, 
+  uncollectPost, 
+  repostPost 
+ } from '@/services/forumService';
+import { getAvatar as getAvatarApi } from '@/services/userService';
+ import { 
+   View, 
   Star, 
   StarFilled, 
-  Share, 
   ChatDotRound,
-  CaretBottom
+  Pointer,
+  Document,
+  Share,
+  Link as LinkIcon,
+  ArrowRight
 } from '@element-plus/icons-vue'
 
 // 定义组件接收的 props (与后端PostSimpleVo结构匹配)
 const props = defineProps({
   id: {
-    type: Number,
+    type: [String, Number],
     required: true
   },
   userId: {
-    type: Number,
+    type: [String, Number],
     required: true
   },
   title: {
@@ -107,6 +147,14 @@ const props = defineProps({
   content: {
     type: String,
     required: true
+  },
+  imageUrls: {
+    type: Array,
+    default: () => []
+  },
+  productUrl: {
+    type: String,
+    default: ''
   },
   createAt: {
     type: [Date, String],
@@ -128,6 +176,10 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  isReposted: {
+    type: Boolean,
+    default: false
+  },
   view: {
     type: Number,
     default: 0
@@ -143,41 +195,92 @@ const props = defineProps({
   commentCount: {
     type: Number,
     default: 0
+  },
+  username: {
+    type: String,
+    default: ''
+  },
+  avatar: {
+    type: String,
+    default: ''
+  },
+  hideFooter: {
+    type: Boolean,
+    default: false
   }
 });
 
 // 定义组件触发的自定义事件
-const emit = defineEmits(['post-liked', 'post-favorited', 'card-clicked', 'reposted', 'user-loaded']);
+const emit = defineEmits(['post-liked', 'post-favorited', 'card-clicked', 'reposted']);
 
 // 响应式状态
 const user = ref({
-  username: '',
-  avatar: ''
+  username: props.username || '',
+  avatar: props.avatar || ''
 });
-const isLoadingUser = ref(false);
+
+// 处理头像：如果后端返回的是文件名，则调用 API 获取完整 URL
+const fetchAvatarIfNeeded = async () => {
+  if (user.value.avatar && !user.value.avatar.startsWith('http') && !user.value.avatar.startsWith('data:')) {
+    try {
+      // 如果 avatar 是文件名，调用后端 getAvatar 接口
+      const avatarUrl = await getAvatarApi(props.userId);
+      if (avatarUrl) {
+        user.value.avatar = avatarUrl;
+      }
+    } catch (error) {
+      console.warn('获取用户头像失败:', error);
+    }
+  }
+};
+
+onMounted(() => {
+  fetchAvatarIfNeeded();
+});
+
+// 监听 props 变化，更新本地 user 状态
+ watch(() => [props.username, props.avatar], ([newUsername, newAvatar]) => {
+   user.value.username = newUsername;
+   user.value.avatar = newAvatar;
+   fetchAvatarIfNeeded();
+ }, { immediate: true });
+
+ // 监听 props 变化，更新本地交互状态
+watch(() => props.isLiked, (newVal) => {
+  localIsLiked.value = newVal;
+});
+watch(() => props.like, (newVal) => {
+  localLikes.value = newVal;
+});
+watch(() => props.isFavorited, (newVal) => {
+  localIsFavorited.value = newVal;
+});
+watch(() => props.collect, (newVal) => {
+  localFavorites.value = newVal;
+});
+watch(() => props.repost, (newVal) => {
+  localShares.value = newVal;
+});
+watch(() => props.isReposted, (newVal) => {
+  localIsReposted.value = newVal;
+});
+
 const showComments = ref(false);
 const router = useRouter();
 
-// 本地状态（
+// 本地状态
 const localLikes = ref(props.like);
 const localIsLiked = ref(props.isLiked);
 const localFavorites = ref(props.collect);
 const localIsFavorited = ref(props.isFavorited);
 const localShares = ref(props.repost);
+const localIsReposted = ref(props.isReposted);
 
 // 计算属性 - 格式化日期
 const formattedDate = computed(() => {
-  // 检查 createAt 是否存在
-  if (!props.createAt) {
-    return '未知日期';
-  }
-  
+  if (!props.createAt) return '未知日期';
   const date = typeof props.createAt === 'string' ? new Date(props.createAt) : props.createAt;
-  
-  // 检查日期是否有效
-  if (!date || isNaN(date.getTime())) {
-    return '无效日期';
-  }
+  if (!date || isNaN(date.getTime())) return '无效日期';
   
   return date.toLocaleDateString('zh-CN', {
     year: 'numeric',
@@ -186,11 +289,11 @@ const formattedDate = computed(() => {
   });
 });
 
-// 计算属性 - 截取内容前50字
+// 计算属性 - 截取内容前150字 (增加字数以支持动态布局)
 const shortContent = computed(() => {
-  let text = props.content;
-  if (text.length > 50) {
-    return text.slice(0, 50) + '...';
+  let text = props.content || '';
+  if (text.length > 150) {
+    return text.slice(0, 150) + '...';
   }
   return text;
 });
@@ -205,44 +308,15 @@ const formatLink = (url) => {
   }
 };
 
-// 方法：加载用户信息
-const loadUser = async () => {
-    console.log('🚀 loadUser 开始执行，userId:', props.userId);
-  try {
-    const userProfile = await getUserInfo(props.userId);
-    console.log('加载用户信息：', userProfile);
-   
-    user.value = {
-      username: userProfile.username || 'apc',
-      avatar: userProfile.avatar
-    };
-  
-    
-    // 通知父组件（仅用于调试/统计，非必须）
-    emit('user-loaded', {
-      postId: props.id,
-      userId: props.userId,
-      user: user.value
-    });
-  } catch (error) {
-    console.warn(`用户 ${props.userId} 信息加载失败，使用默认值`);
-    user.value = {
-      username: 'apc',
-      avatar: ''
-    };
-  
-  }
-};
-
 // 方法：处理头像加载错误
 const handleAvatarError = (e) => {
   e.target.style.display = 'none';
 };
 
-// 方法：跳转到用户主页
-const navigateToUser = (e) => {
+// 方法：处理头像点击 (预留方法：显示用户信息)
+const handleAvatarClick = (e) => {
   e.stopPropagation();
-  if (user.value.username) {
+  if (props.userId) {
     router.push(`/user/${props.userId}`);
   }
 };
@@ -258,17 +332,11 @@ const withOptimisticUpdate = async (updateFn, apiCall) => {
   };
 
   try {
-    // 1. 乐观更新UI
     updateFn();
-    
-    // 2. 调用API
     await apiCall();
-    
     return true;
   } catch (error) {
-    // 3. 仅在非登录错误时回滚
     if (error.message !== '未登录') {
-      // 恢复原始状态
       localLikes.value = originalState.likes;
       localIsLiked.value = originalState.isLiked;
       localFavorites.value = originalState.favorites;
@@ -287,7 +355,11 @@ const handleToggleLike = async () => {
       localLikes.value += localIsLiked.value ? 1 : -1;
     },
     async () => {
-      await privateApiCall(localIsLiked.value ? '/like' : '/unlike', 'POST', { postId: props.id });
+      if (localIsLiked.value) {
+        await likePost(props.id);
+      } else {
+        await unlikePost(props.id);
+      }
       emit('post-liked', {
         id: props.id,
         liked: localIsLiked.value,
@@ -305,7 +377,11 @@ const handleToggleFavorite = async () => {
       localFavorites.value += localIsFavorited.value ? 1 : -1;
     },
     async () => {
-      await privateApiCall(localIsFavorited.value ? '/collect' : '/uncollect', 'POST', { postId: props.id });
+      if (localIsFavorited.value) {
+        await collectPost(props.id);
+      } else {
+        await uncollectPost(props.id);
+      }
       emit('post-favorited', {
         id: props.id,
         favorited: localIsFavorited.value,
@@ -322,12 +398,14 @@ const handleRepost = async (e) => {
   const success = await withOptimisticUpdate(
     () => {
       localShares.value += 1;
+      localIsReposted.value = true;
     },
     async () => {
-      await privateApiCall('/repost', 'POST', { postId: props.id });
+      await repostPost(props.id);
       emit('reposted', {
         id: props.id,
-        newCount: localShares.value
+        newCount: localShares.value,
+        isReposted: true
       });
     }
   );
@@ -341,362 +419,283 @@ const handleToggleComments = () => {
   showComments.value = !showComments.value;
 };
 
+const handleProductClick = () => {
+  if (props.productUrl) {
+    window.open(props.productUrl, '_blank');
+  }
+};
+
 // 方法：处理卡片点击
 const handleCardClick = (e) => {
-  // 阻止统计区域的点击冒泡
-  if (e.target.closest('.stats') || e.target.closest('.views')) {
+  // 如果点击的是页脚的操作项或图片预览，不触发卡片点击
+  if (e.target.closest('.card-footer') || e.target.closest('.el-image-viewer__wrapper')) {
     return;
   }
   
   emit('card-clicked', props.id);
 };
-
-// 生命周期钩子
-onMounted(() => {
-  console.log('🔄 组件挂载，调用 loadUser');
-  loadUser();
-});
-
-// 监听userId变化（例如在分页时）
-watch(() => props.userId, (newVal, oldVal) => {
-  if (newVal !== oldVal) {
-    loadUser();
-  }
-});
 </script>
 
 
 <style scoped>
-.skeleton-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #e0e0e0;
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0% { background-color: #e0e0e0; }
-  50% { background-color: #f0f0f0; }
-  100% { background-color: #e0e0e0; }
-}
 .post-card {
-  border: 1px solid #e0e0e0;
+  background: rgba(255, 255, 255, 0.7); /* 半透明背景 */
+  backdrop-filter: blur(8px); /* 毛玻璃效果 */
+  -webkit-backdrop-filter: blur(8px);
   border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
+  padding: 12px 14px; /* 进一步缩小内边距，让卡片更紧凑 */
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
-  position: relative;
-  overflow: hidden;
-  height: auto; /* Change from fixed height to auto to accommodate comments */
-  min-height: 280px; /* Minimum height for consistency */
   display: flex;
   flex-direction: column;
-  background: white;
+  gap: 8px; /* 缩小主板块间距 */
+  position: relative;
+  overflow: hidden;
+  height: auto; 
 }
 
 .post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-  border-color: #1890ff;
+  transform: translateY(-6px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(59, 130, 246, 0.2);
 }
 
-/* 头部区域 */
-.post-header {
-  margin-bottom: 12px;
-}
-
-/* Ensure content doesn't overflow when comments are hidden but maintains structure */
-.post-content {
-  margin-bottom: 14px;
-  color: #333;
-  line-height: 1.5;
-  flex: 1;
-}
-
-.post-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 14px;
-  color: #666;
-  padding-top: 10px;
-  border-top: 1px solid #f5f5f5;
-  margin-top: auto; /* Push to bottom if height is fixed, but here we use min-height */
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 6px; /* Increased gap for icons */
-  cursor: pointer;
-  transition: all 0.2s ease;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 13.5px;
-}
-
-.dropdown-icon {
-  transition: transform 0.3s;
-  margin-left: 2px;
-}
-
-.dropdown-icon.rotated {
-  transform: rotate(180deg);
-}
-
-.comments-section {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed #eee;
-  animation: fadeIn 0.3s ease;
-}
-
-.comments-placeholder {
-  text-align: center;
-  color: #999;
-  padding: 20px 0;
-  font-size: 14px;
-  background: #f9f9f9;
-  border-radius: 8px;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.like.active {
-  color: #ff4d4f;
-}
-
-.favorite.active {
-  color: #faad14;
-}
-
-/* Fix icon alignment */
-.el-icon {
-  vertical-align: middle;
-  font-size: 16px;
-}
-
-
-/* 用户信息部分 - 头像和文字垂直排列 */
-.user-section {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.avatar-wrapper {
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.avatar-wrapper:hover {
-  transform: scale(1.05);
-}
-
-.avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid #eee;
-  flex-shrink: 0;
-  background-color: #f5f5f5;
-}
-
-.avatar-placeholder {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: #e0e0e0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #666;
-  font-weight: bold;
-  font-size: 18px;
+/* 头部布局：头像左上，名时右侧 */
+.card-header {
+  /* 移除 margin-bottom，由父级 gap 控制 */
 }
 
 .user-info {
   display: flex;
+  align-items: center;
+  gap: 8px; /* 缩小头像和名称间距 */
+}
+
+.user-avatar, .user-avatar-placeholder {
+  width: 28px; /* 缩小头像尺寸 */
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  flex-shrink: 0;
+}
+
+.user-avatar-placeholder {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.user-meta {
+  display: flex;
   flex-direction: column;
-  cursor: pointer;
+  gap: 0px;
 }
 
 .username {
-  margin: 0 0 2px;
-  font-size: 16px;
-  font-weight: 600;
-  color: #1a1a1a;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 180px;
-  transition: color 0.2s;
-}
-
-.username:hover {
-  color: #1890ff;
-}
-
-.post-date {
-  font-size: 13px;
-  color: #8c8c8c;
-}
-
-/* 标题在用户信息下方 */
-.post-title {
-  margin: 0;
-  font-size: 18px;
+  font-size: 13px; 
   font-weight: 700;
-  color: #1a1a1a;
-  line-height: 1.35;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  max-height: 42px;
+  color: #1e293b;
+  line-height: 1.2;
 }
 
-/* 内容区域 */
-.post-content {
-  margin-bottom: 14px;
-  color: #333;
-  line-height: 1.5;
+.publish-time {
+  font-size: 10px;
+  color: #94a3b8;
 }
 
-.content-text {
-  margin: 8px 0 0;
+/* 标题与内容区容器 */
+.post-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px; /* 缩小内容间距 */
+  /* 移除 flex-grow: 1 和 margin-bottom，彻底防止撑开空白 */
+}
+
+/* 标题与内容 */
+.post-title {
   font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.4;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1; 
   -webkit-box-orient: vertical;
   overflow: hidden;
-  word-break: break-word;
+  transition: all 0.3s ease;
 }
 
-.post-link {
-  display: inline-block;
+.no-images .post-title {
+  font-size: 16px; /* 无图时标题稍微放大 */
+}
+
+.pure-text .post-title {
+  -webkit-line-clamp: 2; /* 纯文字时标题允许两行 */
+  font-size: 17px;
+}
+
+.post-content {
   font-size: 13px;
-  color: #1890ff;
-  text-decoration: none;
-  background: #f0f7ff;
-  padding: 3px 8px;
-  border-radius: 4px;
-  max-width: 100%;
+  color: #475569;
+  line-height: 1.5;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2; 
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-top: 6px;
+  transition: all 0.3s ease;
 }
 
-.post-link:hover {
-  text-decoration: underline;
+/* 动态调整正文行数 */
+.no-images .post-content {
+  -webkit-line-clamp: 4; /* 无图时显示4行 */
 }
 
-/* 底部统计信息 */
-.post-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.no-product .post-content {
+  -webkit-line-clamp: 3; /* 无链接时显示3行 */
+}
+
+.no-images.no-product .post-content {
+  -webkit-line-clamp: 6; /* 既无图也无链接时显示6行，填补空白 */
   font-size: 14px;
-  color: #666;
-  padding-top: 10px;
-  border-top: 1px solid #f5f5f5;
-  margin-top: 2px;
+  line-height: 1.6;
 }
 
-.views {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
+/* 图片展示区域 */
+.post-images {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px; /* 缩小图片间距 */
 }
 
-.stats {
-  display: flex;
-  gap: 14px;
+.image-item {
+  aspect-ratio: 1;
+  border-radius: 6px; /* 减小圆角 */
+  overflow: hidden;
+  background-color: #f1f5f9;
 }
 
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  padding: 2px 5px;
-  border-radius: 4px;
-  font-size: 13.5px;
+.image-item.single-image {
+  grid-column: span 3;
+  aspect-ratio: 21/9; /* 默认更扁的比例 */
+  max-height: 200px; 
+  transition: all 0.3s ease;
 }
 
-.stat-item:hover {
-  color: #1890ff;
-  background: #f0f7ff;
+.no-product .image-item.single-image {
+  aspect-ratio: 16/9; /* 无链接时，单图可以稍微高一点 */
+  max-height: 250px;
+}
+
+.image-item :deep(.el-image) {
+  width: 100%;
+  height: 100%;
+  transition: transform 0.3s ease;
+}
+
+.image-item:hover :deep(.el-image) {
   transform: scale(1.05);
 }
 
-.like {
-  color: v-bind('localIsLiked ? "#ff4d4f" : ""');
+/* 商品链接卡片 */
+.product-link-wrapper {
+  /* 移除 margin-bottom，交给父级 gap 处理 */
 }
 
-.like:hover {
-  color: #ff4d4f;
-}
-
-.favorite {
-  color: v-bind('localIsFavorited ? "#faad14" : ""');
-}
-
-.favorite:hover {
-  color: #faad14;
-}
-
-/* 用户加载状态 */
-.user-loading {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.9);
+.product-link-card {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
-  z-index: 10;
+  padding: 6px 12px; /* 缩小内边距 */
+  background: linear-gradient(90deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
 }
 
-.skeleton-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: loading 1.5s infinite;
-  margin-bottom: 8px;
+.product-link-card:hover {
+  background: linear-gradient(90deg, #e0f2fe 0%, #bae6fd 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(186, 230, 253, 0.4);
 }
 
-.skeleton-username {
-  width: 80px;
-  height: 16px;
-  border-radius: 4px;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: loading 1.5s infinite;
+.link-icon {
+  font-size: 14px; /* 缩小图标 */
+  color: #0284c7;
+  margin-right: 8px;
 }
 
-@keyframes loading {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
+.link-text {
+  flex: 1;
+  font-size: 12px; /* 缩小字号 */
+  color: #0369a1;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 8px;
+}
+
+.arrow-icon {
+  font-size: 12px;
+  color: #0284c7;
+}
+
+/* 分割线 */
+.card-divider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.04), transparent);
+  /* 移除 margin-bottom */
+}
+
+/* 底部交互 */
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0px;
+}
+
+.footer-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #64748b;
+  font-size: 12px; /* 缩小字号 */
+  transition: all 0.2s;
+  padding: 4px 8px; /* 缩小内边距 */
+  border-radius: 6px;
+}
+
+.action-item {
+  cursor: pointer;
+}
+
+.action-item:hover {
+  background: rgba(59, 130, 246, 0.05);
+  color: #3b82f6;
+}
+
+.action-item.active {
+  color: #3b82f6;
+  font-weight: 700;
+}
+
+.action-item.active .el-icon {
+  transform: scale(1.1);
+}
+
+.count {
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
 }
 </style>

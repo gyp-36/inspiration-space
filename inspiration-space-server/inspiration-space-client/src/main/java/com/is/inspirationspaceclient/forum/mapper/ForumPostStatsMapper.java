@@ -28,4 +28,18 @@ public interface ForumPostStatsMapper extends BaseMapper<ForumPostStats> {
             "WHERE post_id = #{postId}"
     })
     int updateCollectCount(@Param("postId") Long postId, @Param("delta") int delta);
+
+    @Update({
+            "UPDATE forum_post_stats "+
+            "SET view_count = view_count + #{delta} "+
+            "WHERE post_id = #{postId}"
+    })
+    int updateViewCount(@Param("postId") Long postId, @Param("delta") int delta);
+
+    @Update({
+            "UPDATE forum_post_stats "+
+            "SET comment_count = comment_count + #{delta} "+
+            "WHERE post_id = #{postId}"
+    })
+    int updateCommentCount(@Param("postId") Long postId, @Param("delta") int delta);
 }

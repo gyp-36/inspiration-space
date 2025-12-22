@@ -95,7 +95,8 @@ public enum ErrorCode {
     FILE_TOO_LARGE( 53002, HttpStatus.BAD_REQUEST, "文件大小超出限制"),
     FILE_UPLOAD_FAILED( 53003, HttpStatus.BAD_REQUEST, "文件上传失败"),
     USER_NOT_FOUND_ERROR(53004, HttpStatus.NOT_FOUND, "用户不存在"),
-    USER_STATS_NOT_FOUND_ERROR(53005, HttpStatus.NOT_FOUND,"用户统计信息不存在");
+    USER_STATS_NOT_FOUND_ERROR(53005, HttpStatus.NOT_FOUND,"用户统计信息不存在"),
+    RESOURCE_NOT_FOUND(53006, HttpStatus.NOT_FOUND, "资源不存在" );
 
 
 

@@ -168,65 +168,71 @@ const createGroupChat = () => {
 
 <style scoped>
 .contact-panel {
+  width: 280px;
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: #fff;
-  border-right: 1px solid #f0f0f0;
+  background-color: #f7f7f7;
+  border-right: 1px solid #e0e0e0;
 }
 
 .header-section {
-  padding: 16px 16px 8px;
+  padding: 16px;
   flex-shrink: 0;
+  background-color: #f7f7f7;
 }
 
 .search-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .search-input :deep(.el-input__wrapper) {
-  background-color: #f5f7fa;
+  background-color: #e2e2e2;
   box-shadow: none !important;
-  border: 1px solid transparent;
+  border-radius: 4px;
 }
 
-.search-input :deep(.el-input__wrapper):hover {
-  background-color: #ebeef5;
-}
-
-.search-input :deep(.el-input__wrapper.is-focus) {
-  background-color: #fff;
-  border-color: #409eff;
+.search-input :deep(.el-input__inner) {
+  height: 28px;
+  font-size: 12px;
 }
 
 .add-btn {
-  flex-shrink: 0;
+  width: 28px !important;
+  height: 28px !important;
+  background-color: #e2e2e2 !important;
+  border: none !important;
+  color: #666 !important;
+}
+
+.add-btn:hover {
+  background-color: #d1d1d1 !important;
 }
 
 .session-tabs {
   display: flex;
-  gap: 20px;
+  gap: 16px;
   padding: 0 4px;
 }
 
 .tab-item {
-  font-size: 14px;
-  color: #909399;
+  font-size: 13px;
+  color: #666;
   cursor: pointer;
-  padding-bottom: 8px;
+  padding-bottom: 4px;
   position: relative;
-  transition: all 0.3s;
+  transition: all 0.2s;
 }
 
 .tab-item:hover {
-  color: #303133;
+  color: #333;
 }
 
 .tab-item.active {
-  color: #409eff;
+  color: #07c160;
   font-weight: 500;
 }
 
@@ -237,14 +243,12 @@ const createGroupChat = () => {
   left: 0;
   right: 0;
   height: 2px;
-  background-color: #409eff;
-  border-radius: 1px;
+  background-color: #07c160;
 }
 
 .list-section {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 0;
 }
 
 .session-list {
@@ -252,21 +256,11 @@ const createGroupChat = () => {
   flex-direction: column;
 }
 
-/* 滚动条美化 */
+/* 隐藏滚动条 */
 .list-section::-webkit-scrollbar {
-  width: 5px;
+  width: 0;
 }
 
-.list-section::-webkit-scrollbar-thumb {
-  background: #e4e7ed;
-  border-radius: 10px;
-}
-
-.list-section::-webkit-scrollbar-thumb:hover {
-  background: #dcdfe6;
-}
-
-/* 新建会话弹窗 */
 .new-chat-options {
   display: flex;
   flex-direction: column;
@@ -278,15 +272,14 @@ const createGroupChat = () => {
   align-items: center;
   gap: 16px;
   padding: 16px;
-  border: 1px solid #f0f0f0;
-  border-radius: 12px;
+  border-radius: 8px;
+  background-color: #f8f9fb;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .option-card:hover {
-  background-color: #f5f7fa;
-  border-color: #409eff;
+  background-color: #f0f2f5;
   transform: translateY(-2px);
 }
 
@@ -298,47 +291,20 @@ const createGroupChat = () => {
   align-items: center;
   justify-content: center;
   font-size: 24px;
+  color: #fff;
 }
 
-.option-icon.private {
-  background-color: #ecf5ff;
-  color: #409eff;
-}
-
-.option-icon.group {
-  background-color: #f0f9eb;
-  color: #67c23a;
-}
-
-.option-info {
-  flex: 1;
-}
+.option-icon.private { background: linear-gradient(135deg, #409eff, #79bbff); }
+.option-icon.group { background: linear-gradient(135deg, #67c23a, #95d475); }
 
 .option-title {
-  font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
   color: #303133;
   margin-bottom: 4px;
 }
 
 .option-desc {
-  font-size: 13px;
+  font-size: 12px;
   color: #909399;
-}
-
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .header-section {
-    padding: 12px 12px 4px;
-  }
-  
-  .search-bar {
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-  
-  .session-tabs {
-    gap: 16px;
-  }
 }
 </style>

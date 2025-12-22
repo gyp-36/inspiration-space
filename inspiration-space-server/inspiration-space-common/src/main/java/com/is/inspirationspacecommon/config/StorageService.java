@@ -1,6 +1,7 @@
 package com.is.inspirationspacecommon.config;
 
 import io.minio.*;
+import io.minio.messages.Bucket;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -50,7 +52,6 @@ public class StorageService {
         return objectKey;
     }
 
-
     // ====== 2. 生成预签名URL ======
     @SneakyThrows
     public String getPreSignedUrl(String bucketName, String objectKey, int expiry, TimeUnit unit) {
@@ -85,7 +86,24 @@ public class StorageService {
         }
     }
 
-    // ====== 4. 检查桶是否存在 ======
+    // ====== 4. 复制文件 ======
+    @SneakyThrows
+    public void copyObject(String sourceBucket, String sourceObject, String targetBucket, String targetObject) {
+        try {
+            minioClient.copyObject(
+                CopyObjectArgs.builder()
+                    .source(CopySource.builder().bucket(sourceBucket).object(sourceObject).build())
+                    .bucket(targetBucket)
+                    .object(targetObject)
+                    .build()
+            );
+        } catch (Exception e) {
+            log.error("复制MinIO文件失败: source={}/{}, target={}/{}", sourceBucket, sourceObject, targetBucket, targetObject, e);
+            throw e;
+        }
+    }
+
+    // ====== 5. 检查桶是否存在 ======
     private boolean bucketExists(String bucketName) {
         try {
             boolean exists = minioClient.bucketExists(

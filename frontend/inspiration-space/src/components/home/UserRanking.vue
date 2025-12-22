@@ -36,24 +36,42 @@
 </template>
 
 <script setup>
-import { defineProps, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
+import { getUserRanking } from '@/services/userService';
 
-const props = defineProps({
-  users: {
-    type: Array,
-    required: true
+const users = ref([]);
+const loading = ref(false);
+
+const fetchRanking = async () => {
+  loading.value = true;
+  try {
+    const res = await getUserRanking(5);
+    if (res) {
+      // 映射后端字段到前端展示字段
+      users.value = res.map((user, index) => ({
+        rank: index + 1,
+        name: user.username,
+        avatar: user.avatarUrl || 'https://bailian-bmp-pre.oss-cn-hangzhou.aliyuncs.com/public/system_agent/PlaceHolder.png',
+        points: user.likesCount || 0, // 暂时用点赞数代替积分
+        level: getLevelByLikes(user.likesCount || 0)
+      }));
+    }
+  } catch (error) {
+    console.error('获取创作者榜单失败:', error);
+  } finally {
+    loading.value = false;
   }
-});
+};
+
+const getLevelByLikes = (likes) => {
+  if (likes >= 1000) return '大师';
+  if (likes >= 500) return '专家';
+  if (likes >= 100) return '高级';
+  return '新锐';
+};
 
 onMounted(() => {
-  // 交互逻辑保持不变
-  const items = document.querySelectorAll('.ranking-item');
-  items.forEach(item => {
-    item.addEventListener('click', () => {
-      const userName = item.querySelector('.user-name').textContent;
-      console.log(`点击了用户: ${userName}`);
-    });
-  });
+  fetchRanking();
 });
 </script>
 

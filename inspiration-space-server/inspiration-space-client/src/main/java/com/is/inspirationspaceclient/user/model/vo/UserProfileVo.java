@@ -33,12 +33,6 @@ public class UserProfileVo {
     @Schema(name = "birthDate", type = "LocalDate", description = "生日")
     private LocalDate birthDate;
 
-    @Schema(name = "bio", type = "String", description = "简介")
-    private String bio;
-
-    @Schema(name = "avatarUrl", type = "String", description = "头像URL")
-    private String avatarUrl;
-
     @Schema(name = "registerTime", type = "LocalDateTime", description = "注册时间")
     private LocalDateTime registerTime;
 

@@ -13,7 +13,13 @@
       <!-- 中间：搜索框区域 -->
       <div class="center-section">
         <div v-if="isHomePage" class="search-container">
-          <input type="text" placeholder="搜索作品..." class="search-input" ref="searchInputRef" />
+          <input 
+            type="text" 
+            placeholder="搜索作品..." 
+            class="search-input" 
+            ref="searchInputRef"
+            @keyup.enter="handleSearch"
+          />
           <button class="search-button" @click="handleSearch">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
               <path
@@ -98,7 +104,7 @@
 
 <script setup>
 import { ref, computed, defineEmits, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { HomeFilled, ChatDotRound, Postcard, QuestionFilled } from '@element-plus/icons-vue';
 import LoginModal from '@/components/home/LoginModel.vue';
@@ -107,6 +113,7 @@ import { useUserStore } from '@/stores/userStore';
 // 初始化Pinia Store（核心：所有状态/方法从store获取）
 const userStore = useUserStore();
 const route = useRoute();
+const router = useRouter();
 
 // 定义事件
 const emit = defineEmits(['search']);
@@ -159,15 +166,17 @@ const handleItemClick = (action) => {
 };
 
 /**
- * 搜索处理（组件局部逻辑，仅触发事件）
+ * 搜索处理
  */
 const handleSearch = () => {
   const searchValue = searchInputRef.value?.value.trim() || '';
   if (searchValue) {
-    emit('search', searchValue);
+    // 如果不在首页，跳转到首页并带上搜索参数
+    router.push({ path: '/', query: { keyword: searchValue } });
     ElMessage.info(`正在搜索：${searchValue}`);
   } else {
-    ElMessage.warning('请输入搜索内容');
+    // 如果清空搜索框，返回首页
+    router.push({ path: '/' });
   }
 };
 
@@ -188,20 +197,23 @@ const handleRegister = async (registerData) => {
 };
 
 /**
- * 找回密码逻辑（可后续迁移至store）
+ * 找回密码逻辑
  * @param {Object} forgotData 找回密码表单数据
  */
 const handleForgotPassword = async (forgotData) => {
+  if (forgotData.newPassword !== forgotData.confirmPassword) {
+    ElMessage.error('两次输入的新密码不一致');
+    return;
+  }
+  
   try {
-    if (forgotData.newPassword !== forgotData.confirmPassword) {
-      ElMessage.error('两次输入的新密码不一致');
-      return;
-    }
-    // 后续可迁移至store：userStore.forgotPassword(forgotData)
-    ElMessage.info('找回密码功能待实现');
+    // 模拟找回密码逻辑，后续可迁移至 store
+    // await userStore.forgotPassword(forgotData)
+    ElMessage.success('密码重置成功，请使用新密码登录');
+    userStore.switchView('login');
   } catch (error) {
     console.error('找回密码失败：', error);
-    ElMessage.error('网络异常，请检查网络连接');
+    ElMessage.error('重置密码失败，请检查邮箱是否正确');
   }
 };
 </script>

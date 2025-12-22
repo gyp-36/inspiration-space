@@ -40,22 +40,33 @@
 </template>
 
 <script setup>
-import { defineProps, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
+import { workService } from '@/services/workService';
 
-const props = defineProps({
-  ranking: {
-    type: Array,
-    required: true
+const ranking = ref([]);
+const loading = ref(false);
+
+const fetchRanking = async () => {
+  loading.value = true;
+  try {
+    const res = await workService.getWorkLikeRank(5);
+    if (res) {
+      ranking.value = res.map((item, index) => ({
+        rank: index + 1,
+        name: item.workName || `作品 ${item.workId}`,
+        score: item.likeCount || 0,
+        workId: item.workId
+      }));
+    }
+  } catch (error) {
+    console.error('获取热门榜单失败:', error);
+  } finally {
+    loading.value = false;
   }
-});
+};
 
 onMounted(() => {
-  const items = document.querySelectorAll('.ranking-item');
-  items.forEach(item => {
-    item.addEventListener('click', () => {
-      console.log(`点击了排行榜项: ${item.querySelector('.work-name').textContent}`);
-    });
-  });
+  fetchRanking();
 });
 </script>
 

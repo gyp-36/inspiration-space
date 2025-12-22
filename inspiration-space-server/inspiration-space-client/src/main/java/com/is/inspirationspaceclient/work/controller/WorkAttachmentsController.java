@@ -34,7 +34,7 @@ public class WorkAttachmentsController {
     @Operation(summary = "上传作品附件")
     @PostMapping("/upload")
     public ApiResponse<WorkAttachmentVo> uploadWorkAttachment(
-            @Valid @RequestBody Long workId,
+            @RequestParam("workId") Long workId,
             @RequestHeader("Authorization") String token,
             @RequestParam("file") MultipartFile file) {
         return ApiResponse.ok(workAttachmentsService.uploadWorkAttachment(token, workId, file));

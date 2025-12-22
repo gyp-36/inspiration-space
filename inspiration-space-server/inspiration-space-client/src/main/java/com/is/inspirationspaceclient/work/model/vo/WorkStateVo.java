@@ -15,6 +15,6 @@ public class WorkStateVo implements Serializable {
     @Schema(name= "title",type = "String",description = "作品标题")
     private String title;
 
-    @Schema(name = "total_sales", type = "int", description = "总销量")
-    private int totalSales;
+    @Schema(name = "totalSales", type = "Integer", description = "总销量")
+    private Integer totalSales;
 }

@@ -4,17 +4,22 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import com.is.inspirationspaceclient.forum.model.dto.CommentDto;
 import com.is.inspirationspaceclient.forum.model.dto.ForumCreateDto;
+import com.is.inspirationspaceclient.forum.model.vo.CommentVo;
 import com.is.inspirationspaceclient.forum.model.vo.PostDetailVo;
 import com.is.inspirationspaceclient.forum.model.vo.PostSimpleVo;
 import com.is.inspirationspaceclient.forum.service.ForumCommentService;
 import com.is.inspirationspaceclient.forum.service.ForumService;
 
 import com.is.inspirationspacecommon.util.ApiResponse;
+import com.is.inspirationspacecommon.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 
 @RestController
@@ -28,6 +33,14 @@ public class ForumController {
     public ForumController(ForumService forumService, ForumCommentService forumCommentService) {
         this.forumService = forumService;
         this.forumCommentService = forumCommentService;
+    }
+
+    @Operation(summary = "上传图片")
+    @PostMapping("/upload")
+    public ApiResponse<String> uploadImage(
+            @RequestHeader("Authorization") String token,
+            @RequestParam("file") MultipartFile file) {
+        return ApiResponse.ok(forumService.uploadImage(token, file));
     }
 
     @Operation(summary = "发布帖子")
@@ -45,24 +58,41 @@ public class ForumController {
         return ApiResponse.ok(forumService.deletePost(postId));
     }
 
-    @Operation(summary = "获取所有帖子(默认)")
+    @Operation(summary = "主页获取所有帖子(按sort区分)")
     @GetMapping("/getAll")
     public ApiResponse<Page<PostSimpleVo>> getAllPosts(
+            @RequestHeader(value = "Authorization", required = false) String token,
             @RequestParam String sort,
+            @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ApiResponse.ok(forumService.getAllPosts(sort,page, size));
+        return ApiResponse.ok(forumService.getAllPosts(token, sort, keyword, page, size));
+    }
+
+    @Operation(summary = "获取收藏的帖子")
+    @GetMapping("/getCollected")
+    public ApiResponse<Page<PostSimpleVo>> getCollectedPosts(
+            @RequestHeader("Authorization") String token,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "15") int size) {
+        return ApiResponse.ok(forumService.getCollectedPosts(token, page, size));
     }
 
     @Operation(summary = "获取帖子详情")
     @GetMapping("/getDetail/{postId}")
-    public ApiResponse<PostDetailVo> getPostDetail(@PathVariable Long postId) {
-        return ApiResponse.ok(forumService.getPostDetail(postId));
+    public ApiResponse<PostDetailVo> getPostDetail(
+            @RequestHeader(value = "Authorization", required = false) String token,
+            @PathVariable Long postId) {
+        return ApiResponse.ok(forumService.getPostDetail(token, postId));
     }
 
     @Operation(summary = "发布评论")
     @PostMapping("/comment")
-    public ApiResponse<Boolean> createComment(@RequestBody CommentDto commentDto) {
+    public ApiResponse<Boolean> createComment(
+            @RequestHeader("Authorization") String token,
+            @RequestBody CommentDto commentDto) {
+        Long userId = JwtUtil.getUserIdFromToken(token);
+        commentDto.setUserId(userId);
         return ApiResponse.ok(forumCommentService.createComment(commentDto));
     }
 
@@ -70,6 +100,30 @@ public class ForumController {
     @PostMapping("/deleteComment")
     public ApiResponse<Boolean> deleteComment(@Schema(description = "评论ID") Long commentId) {
         return ApiResponse.ok(forumCommentService.deleteComment(commentId));
+    }
+
+    @Operation(summary = "获取帖子评论")
+    @GetMapping("/getComments/{postId}")
+    public ApiResponse<List<CommentVo>> getComments(
+            @RequestHeader(value = "Authorization", required = false) String token,
+            @PathVariable Long postId) {
+        return ApiResponse.ok(forumCommentService.getCommentsByPostId(token, postId));
+    }
+
+    @Operation(summary = "点赞评论")
+    @PostMapping("/likeComment")
+    public ApiResponse<Boolean> likeComment(
+            @RequestHeader("Authorization") String token,
+            @RequestParam Long commentId) {
+        return ApiResponse.ok(forumCommentService.likeComment(token, commentId));
+    }
+
+    @Operation(summary = "取消点赞评论")
+    @PostMapping("/unlikeComment")
+    public ApiResponse<Boolean> unlikeComment(
+            @RequestHeader("Authorization") String token,
+            @RequestParam Long commentId) {
+        return ApiResponse.ok(forumCommentService.unlikeComment(token, commentId));
     }
 
     @Operation(summary = "点赞")

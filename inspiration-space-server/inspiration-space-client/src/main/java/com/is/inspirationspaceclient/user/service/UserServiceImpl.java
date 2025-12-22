@@ -3,12 +3,14 @@ package com.is.inspirationspaceclient.user.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 
 
 import com.is.inspirationspaceclient.user.mapper.*;
 import com.is.inspirationspaceclient.user.model.dto.*;
 import com.is.inspirationspaceclient.user.model.entity.*;
+import com.is.inspirationspaceclient.user.model.entity.enums.FollowType;
 import com.is.inspirationspaceclient.user.model.entity.enums.UserStatus;
 import com.is.inspirationspaceclient.user.model.vo.*;
 import com.is.inspirationspaceclient.user.rabbitmq.UserMessageProducer;
@@ -41,6 +43,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -72,7 +75,7 @@ public class UserServiceImpl implements UserService {
 
     private StorageService storageService;
 
-
+    private UserRelationshipMapper userRelationshipMapper;
 
     @Transactional(rollbackFor = Exception.class)
     @Override
@@ -221,6 +224,30 @@ public class UserServiceImpl implements UserService {
         log.info("[用户登录成功] userId={}, username={}", user.getUserId(), username);
         return userLoginVo;
 
+    }
+
+    /**
+     * 从请求头 Token 获取当前登录用户 ID
+     */
+    private Long getCurrentUserIdFromToken() {
+        HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest();
+        String token = request.getHeader("Authorization");
+
+        if (token != null && token.startsWith("Bearer ")) {
+            token = token.substring(7);
+        } else {
+            throw new IsArgumentException(ErrorCode.USER_TOKEN_ERROR.getHttpStatusCode(), "无效的token:" + token);
+        }
+
+        RedisKeyBuild tokenKey = RedisKeyBuild.createRedisKey(RedisKeyManage.USER_LOGIN, token, "STATUS");
+        if (!redisCache.hasKey(tokenKey)) {
+            throw new IsArgumentException(ErrorCode.USER_TOKEN_ERROR.getHttpStatusCode(), "未登录");
+        }
+        UserLoginVo userLoginVo = redisCache.get(tokenKey, UserLoginVo.class);
+        if (userLoginVo == null || userLoginVo.getUserId() == null) {
+            throw new IsArgumentException(ErrorCode.USER_TOKEN_ERROR.getHttpStatusCode(), "登录状态已失效");
+        }
+        return userLoginVo.getUserId();
     }
 
     private void newToken(User user, String username, UserLoginVo userLoginVo, RedisKeyBuild userTokensKey) {
@@ -577,4 +604,126 @@ public class UserServiceImpl implements UserService {
         return emptyNames.toArray(new String[0]);
     }
 
+    @Override
+    public Boolean followUser(Long targetUserId) {
+        if (targetUserId == null) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "目标用户ID不能为空");
+        }
+        Long currentUserId = getCurrentUserIdFromToken();
+        if (currentUserId.equals(targetUserId)) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "不能关注自己");
+        }
+
+        UserRelationship relationship = userRelationshipMapper.selectOne(Wrappers.<UserRelationship>lambdaQuery()
+                .eq(UserRelationship::getFollowerId, currentUserId)
+                .eq(UserRelationship::getFolloweeId, targetUserId));
+
+        boolean alreadyFollowing = relationship != null && relationship.getFollowType() == FollowType.FOLLOW;
+        if (!alreadyFollowing) {
+            LocalDateTime now = LocalDateTime.now();
+            if (relationship == null) {
+                relationship = new UserRelationship();
+                relationship.setFollowerId(currentUserId);
+                relationship.setFolloweeId(targetUserId);
+                relationship.setFollowType(FollowType.FOLLOW);
+                relationship.setFollowTime(now);
+                relationship.setUpdateTime(now);
+                userRelationshipMapper.insert(relationship);
+            } else {
+                relationship.setFollowType(FollowType.FOLLOW);
+                relationship.setUpdateTime(now);
+                userRelationshipMapper.update(relationship, Wrappers.<UserRelationship>lambdaQuery()
+                        .eq(UserRelationship::getFollowerId, currentUserId)
+                        .eq(UserRelationship::getFolloweeId, targetUserId));
+            }
+            // 更新统计：当前用户关注数 +1，被关注者粉丝数 +1
+            adjustFollowStats(currentUserId, targetUserId, 1);
+        }
+        return true;
+    }
+
+    @Override
+    public Boolean unfollowUser(Long targetUserId) {
+        if (targetUserId == null) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "目标用户ID不能为空");
+        }
+        Long currentUserId = getCurrentUserIdFromToken();
+        if (currentUserId.equals(targetUserId)) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "不能取关自己");
+        }
+
+        UserRelationship relationship = userRelationshipMapper.selectOne(Wrappers.<UserRelationship>lambdaQuery()
+                .eq(UserRelationship::getFollowerId, currentUserId)
+                .eq(UserRelationship::getFolloweeId, targetUserId));
+
+        boolean wasFollowing = relationship != null && relationship.getFollowType() == FollowType.FOLLOW;
+        if (relationship != null && relationship.getFollowType() != FollowType.UNFOLLOW) {
+            relationship.setFollowType(FollowType.UNFOLLOW);
+            relationship.setUpdateTime(LocalDateTime.now());
+            userRelationshipMapper.update(relationship, Wrappers.<UserRelationship>lambdaQuery()
+                    .eq(UserRelationship::getFollowerId, currentUserId)
+                    .eq(UserRelationship::getFolloweeId, targetUserId));
+        }
+        if (wasFollowing) {
+            adjustFollowStats(currentUserId, targetUserId, -1);
+        }
+        return true;
+    }
+
+    @Override
+    public Boolean isFollowing(Long targetUserId) {
+        if (targetUserId == null) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "目标用户ID不能为空");
+        }
+        Long currentUserId = getCurrentUserIdFromToken();
+        UserRelationship relationship = userRelationshipMapper.selectOne(Wrappers.<UserRelationship>lambdaQuery()
+                .eq(UserRelationship::getFollowerId, currentUserId)
+                .eq(UserRelationship::getFolloweeId, targetUserId));
+        return relationship != null && relationship.getFollowType() == FollowType.FOLLOW;
+    }
+
+    /**
+     * 调整关注/粉丝计数，delta 可为 1 或 -1
+     */
+    private void adjustFollowStats(Long followerId, Long followeeId, int delta) {
+        UserStats followerStats = userStatsMapper.selectById(followerId);
+        if (followerStats != null) {
+            int newFollowings = Math.max(0, Optional.ofNullable(followerStats.getFollowingsCount()).orElse(0) + delta);
+            followerStats.setFollowingsCount(newFollowings);
+            userStatsMapper.updateById(followerStats);
+        }
+
+        UserStats followeeStats = userStatsMapper.selectById(followeeId);
+        if (followeeStats != null) {
+            int newFans = Math.max(0, Optional.ofNullable(followeeStats.getFansCount()).orElse(0) + delta);
+            followeeStats.setFansCount(newFans);
+            userStatsMapper.updateById(followeeStats);
+        }
+    }
+
+    @Override
+    public List<UserVo> getUserRanking(int topN) {
+        // 1. 查询统计信息排名前 N 的用户 ID
+        List<UserStats> topStats = userStatsMapper.selectList(new QueryWrapper<UserStats>()
+                .orderByDesc("likes_count")
+                .last("LIMIT " + topN));
+
+        if (CollectionUtils.isEmpty(topStats)) {
+            return Collections.emptyList();
+        }
+
+        // 2. 批量查询用户信息并组合
+        return topStats.stream().map(stats -> {
+            UserVo vo = new UserVo();
+            User user = userMapper.selectById(stats.getUserId());
+            if (user != null) {
+                vo.setId(user.getUserId());
+                vo.setUsername(user.getUsername());
+                vo.setAvatarUrl(user.getAvatarUrl());
+                vo.setBio(user.getBio());
+            }
+            BeanUtils.copyProperties(stats, vo, "update_time", "user_id");
+            return vo;
+        }).collect(Collectors.toList());
+    }
 }

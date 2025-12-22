@@ -19,6 +19,16 @@ const router = createRouter({
       component: () => import('../views/Forum.vue'),
     },
     {
+      path: '/forum/:postId',
+      name: 'post-detail',
+      component: () => import('../views/PostDetail.vue'),
+    },
+    {
+      path: '/user/:userId',
+      name: 'user-profile',
+      component: () => import('../views/UserProfile.vue'),
+    },
+    {
       path: '/help',
       name: 'help',
       component: () => import('../views/Help.vue'),
@@ -27,6 +37,16 @@ const router = createRouter({
       path: '/chat',
       name: 'chat',
       component: () => import('../views/ChatContainer.vue'),
+    },
+    {
+      path: '/publish',
+      name: 'work-publish',
+      component: () => import('../views/WorkPublishView.vue'),
+    },
+    {
+      path: '/work/:workId',
+      name: 'work-detail',
+      component: () => import('../views/WorkDetail.vue'),
     }
   ],
 })

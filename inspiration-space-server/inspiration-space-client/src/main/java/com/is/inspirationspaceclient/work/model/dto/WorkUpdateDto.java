@@ -7,6 +7,7 @@ import lombok.Data;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.List;
 
 @Data
 @Schema(description = "作品更新信息")
@@ -36,6 +37,10 @@ public class WorkUpdateDto implements Serializable {
     @Schema(name = "visibility", type = "Visibility", description = "可见性")
     private Visibility visibility;
 
+    @Schema(name = "attachmentIds", type = "List<Long>", description = "附件ID列表")
+    private List<Long> attachmentIds;
 
+    @Schema(name = "tags", type = "List<String>", description = "标签名称列表")
+    private List<String> tags;
 
 }

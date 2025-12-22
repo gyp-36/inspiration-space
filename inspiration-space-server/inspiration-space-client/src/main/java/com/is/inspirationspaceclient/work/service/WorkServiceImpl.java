@@ -13,11 +13,20 @@ import com.is.inspirationspaceclient.work.model.dto.WorkUpdateDto;
 import com.is.inspirationspaceclient.work.model.entity.WorkAttachment;
 import com.is.inspirationspaceclient.work.model.entity.WorkInfo;
 import com.is.inspirationspaceclient.work.model.entity.WorkStats;
+import com.is.inspirationspaceclient.work.mapper.TagMapper;
+import com.is.inspirationspaceclient.work.mapper.WorkTagsMapper;
+import com.is.inspirationspaceclient.work.model.entity.Tag;
+import com.is.inspirationspaceclient.work.model.entity.WorkTag;
 import com.is.inspirationspaceclient.work.model.entity.enums.Status;
 import com.is.inspirationspaceclient.work.model.entity.enums.Visibility;
 import com.is.inspirationspaceclient.work.model.vo.WorkDetailVo;
 import com.is.inspirationspaceclient.work.model.vo.WorkSimpleVo;
 import com.is.inspirationspaceclient.work.mapper.WorkInfoMapper;
+import com.is.inspirationspaceclient.user.mapper.UserMapper;
+import com.is.inspirationspaceclient.user.model.entity.User;
+import com.is.inspirationspaceclient.forum.mapper.ForumUserActionsMapper;
+import com.is.inspirationspaceclient.forum.model.entity.ForumUserActions;
+import com.is.inspirationspaceclient.forum.model.entity.enums.TargetType;
 import com.is.inspirationspacecommon.config.StorageService;
 import com.is.inspirationspacecommon.enums.ErrorCode;
 import com.is.inspirationspacecommon.exception.IsArgumentException;
@@ -33,9 +42,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.IOException;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -69,15 +76,31 @@ public class WorkServiceImpl implements WorkService {
     @Autowired
     private WorkStatsMapper workStatsMapper;
 
+    @Autowired
+    private TagMapper tagMapper;
+
+    @Autowired
+    private WorkTagsMapper workTagsMapper;
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Autowired
+    private ForumUserActionsMapper userActionsMapper;
+
+    @Autowired
+    private WorkStateService workStateService;
+
     /**
-     * 创建草稿
+     * 创建作品草稿
      *
-     * @param token
-     * @param workCreateDto
-     * @return
+     * @param token 前端传入的Authorization头
+     * @param workCreateDto 作品创建DTO
+     * @return 新创建的作品ID
      */
     @Override
-    public Boolean createDraft(String token, WorkCreateDto workCreateDto) {
+    @Transactional(rollbackFor = Exception.class)
+    public Long createDraft(String token, WorkCreateDto workCreateDto) {
         //1.解析token,获取用户ID
         Long userId = JwtUtil.getUserIdFromToken(token);
         if (userId == null) {
@@ -93,43 +116,36 @@ public class WorkServiceImpl implements WorkService {
 
         // 3. 处理封面图
         if (StringUtils.isNotBlank(workCreateDto.getCoverUrl())) {
-            // 封面图URL已由前端上传时直接返回，无需额外校验
-            workInfo.setCoverUrl(workCreateDto.getCoverUrl());
-        } else {
-            throw new IsArgumentException("封面图必填");
+            // 尝试从URL中提取Key
+            String coverKey = extractKeyFromUrl(workCreateDto.getCoverUrl());
+            // URL解码
+            if (coverKey != null) {
+                try {
+                    coverKey = java.net.URLDecoder.decode(coverKey, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                   log.warn("封面Key解码失败", e);
+                }
+            }
+            workInfo.setCoverUrl(coverKey);
         }
 
         // 4. 保存作品
         workInfoMapper.insert(workInfo);
 
+        // 5. 处理附件关联关系
+        handleAttachmentRelations(workInfo.getWorkId(), workCreateDto.getAttachmentIds());
 
-        // 5. 处理普通附件（关联到 work_attachment 表）
-        if (CollectionUtils.isNotEmpty(workCreateDto.getAttachmentIds())) {
-            for (Long attachmentId : workCreateDto.getAttachmentIds()) {
-                WorkAttachment attachment = workAttachmentsMapper.selectById(attachmentId);
-                if (attachment == null) {
-                    throw new IsServiceException("附件不存在");
-                }
-                // 关联作品ID
-                attachment.setWorkId(workInfo.getWorkId());
-                workAttachmentsMapper.insert(attachment);
-            }
-        }
+        // 6. 处理标签关联关系
+        handleTagRelations(workInfo.getWorkId(), workCreateDto.getTags());
 
-        // 5. 异步发送消息
-//        messageService.sendDraftCreatedMessage(workInfo);
-        return true;
+        return workInfo.getWorkId();
     }
 
     /**
-     * 发布作品
-     *
-     * @param token
-     * @param workId
-     * @return
+     * 更新草稿
      */
-    @Transactional(rollbackFor = Exception.class)
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Boolean updateDraft(Long workId, String token, WorkCreateDto workCreateDto) {
         // 1. 验证token并获取用户ID
         Long userId = JwtUtil.getUserIdFromToken(token);
@@ -145,36 +161,38 @@ public class WorkServiceImpl implements WorkService {
         if (!workInfo.getCreatorId().equals(userId)) {
             throw new IsArgumentException(ErrorCode.PERMISSION_DENIED.getHttpStatusCode(), "无权修改非本人作品");
         }
-        if (workInfo.getStatus() != Status.WRITING) {
-            throw new IsArgumentException(ErrorCode.INVALID_STATUS.getHttpStatusCode(), "仅允许修改草稿状态作品");
-        }
-
+        
         // 3. 处理封面图更新
         if (StringUtils.isNotBlank(workCreateDto.getCoverUrl())) {
-            // 校验封面图URL格式
-            if (!workCreateDto.getCoverUrl().startsWith("https://") && !workCreateDto.getCoverUrl().startsWith("http://")) {
-                throw new IsArgumentException("封面图URL格式无效");
+            // 尝试从URL中提取Key
+            String coverKey = extractKeyFromUrl(workCreateDto.getCoverUrl());
+            // URL解码
+            if (coverKey != null) {
+                try {
+                    coverKey = java.net.URLDecoder.decode(coverKey, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                    log.warn("封面Key解码失败", e);
+                }
             }
-            workInfo.setCoverUrl(workCreateDto.getCoverUrl());
+            workInfo.setCoverUrl(coverKey);
         }
 
         // 4. 处理附件关联关系
         handleAttachmentRelations(workId, workCreateDto.getAttachmentIds());
 
-        // 5. 更新作品基础信息（排除自增/系统字段）
+        // 5. 处理标签关联关系
+        handleTagRelations(workId, workCreateDto.getTags());
+
+        // 6. 更新作品基础信息（排除系统字段）
         BeanUtils.copyProperties(workCreateDto, workInfo,
                 "id", "creator_id", "status", "created_at", "published_at", "deleted_at",
                 "total_revenue", "total_sales", "updated_at");
 
-        // 6. 更新更新时间（由数据库自动维护）
+        // 7. 更新时间
         workInfo.setUpdatedAt(LocalDateTime.now());
 
-        // 7. 保存更新
+        // 8. 保存更新
         workInfoMapper.updateById(workInfo);
-
-
-        // 9. 异步发送消息（如更新通知）
-//        messageService.sendDraftUpdatedMessage(workInfo);
 
         return true;
     }
@@ -186,6 +204,10 @@ public class WorkServiceImpl implements WorkService {
      * @param newAttachmentIds 前端传入的新附件ID列表
      */
     private void handleAttachmentRelations(Long workId, List<Long> newAttachmentIds) {
+        if (newAttachmentIds == null) {
+            return;
+        }
+
         // 1. 获取当前作品已关联的附件
         List<WorkAttachment> currentAttachments = workAttachmentsMapper.selectByWorkId(workId);
         Set<Long> currentAttachmentIds = currentAttachments.stream()
@@ -193,20 +215,15 @@ public class WorkServiceImpl implements WorkService {
                 .collect(Collectors.toSet());
 
         // 2. 处理新增附件
-        if (CollectionUtils.isNotEmpty(newAttachmentIds)) {
-            for (Long attachmentId : newAttachmentIds) {
-                // 检查附件是否存在
-                WorkAttachment attachment = workAttachmentsMapper.selectById(attachmentId);
-                if (attachment == null) {
-                    throw new IsArgumentException("附件ID不存在: " + attachmentId);
-                }
+        for (Long attachmentId : newAttachmentIds) {
+            // 检查附件是否存在
+            WorkAttachment attachment = workAttachmentsMapper.selectById(attachmentId);
+            if (attachment == null) {
+                continue;
+            }
 
-                // 检查附件是否已被其他作品占用
-                if (attachment.getWorkId() != null && !attachment.getWorkId().equals(workId)) {
-                    throw new IsArgumentException("附件已被其他作品使用: " + attachmentId);
-                }
-
-                // 关联到当前作品
+            // 关联到当前作品
+            if (attachment.getWorkId() == null || !attachment.getWorkId().equals(workId)) {
                 attachment.setWorkId(workId);
                 workAttachmentsMapper.updateById(attachment);
             }
@@ -227,6 +244,45 @@ public class WorkServiceImpl implements WorkService {
         }
     }
 
+    /**
+     * 处理标签关联关系更新
+     *
+     * @param workId   当前作品ID
+     * @param tagNames 前端传入的标签名称列表
+     */
+    private void handleTagRelations(Long workId, List<String> tagNames) {
+        if (tagNames == null) {
+            return;
+        }
+
+        // 1. 删除旧的关联
+        workTagsMapper.delete(new QueryWrapper<WorkTag>().eq("work_id", workId));
+
+        // 2. 如果没有新标签，直接返回
+        if (tagNames.isEmpty()) {
+            return;
+        }
+
+        // 3. 处理每一个标签名称
+        for (String tagName : tagNames) {
+            if (StringUtils.isBlank(tagName)) continue;
+
+            // 3.1 查找或创建标签
+            Tag tag = tagMapper.selectOne(new QueryWrapper<Tag>().eq("tag_name", tagName));
+            if (tag == null) {
+                tag = new Tag();
+                tag.setTagName(tagName);
+                tagMapper.insert(tag);
+            }
+
+            // 3.2 创建关联
+            WorkTag workTag = new WorkTag();
+            workTag.setWorkId(workId);
+            workTag.setTagId(tag.getTagId());
+            workTagsMapper.insert(workTag);
+        }
+    }
+
 
     /**
      * 发布作品
@@ -236,6 +292,7 @@ public class WorkServiceImpl implements WorkService {
      * @return
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Boolean publishWork(String token, Long workId) {
         //1.解析token,获取用户ID
         Long userId = JwtUtil.getUserIdFromToken(token);
@@ -244,21 +301,37 @@ public class WorkServiceImpl implements WorkService {
         }
         //2.获取作品,判断是否是作者
         WorkInfo workInfo = workInfoMapper.selectById(workId);
-        if (!workInfo.getCreatorId().equals(userId)) {
-            throw new IsArgumentException("无权限");
+        if (workInfo == null) {
+            throw new IsArgumentException(ErrorCode.WORK_NOT_FOUND.getHttpStatusCode(), "作品不存在");
         }
+        if (!workInfo.getCreatorId().equals(userId)) {
+            throw new IsArgumentException(ErrorCode.PERMISSION_DENIED.getHttpStatusCode(), "无权限");
+        }
+        
         //3.发布作品
-        if (workInfo.getStatus() != Status.WRITING) {
+        if (workInfo.getStatus() != Status.PUBLISHED) {
             //修改状态
             workInfo.setStatus(Status.PUBLISHED);
+            workInfo.setPublishedAt(LocalDateTime.now());
             workInfoMapper.updateById(workInfo);
 
-            // 创建统计表
-            WorkStats workStats = new WorkStats();
-            workStats.setWorkId(workId);
-            workStatsMapper.insert(workStats);
+            // 同步更新关联的附件状态
+            List<WorkAttachment> attachments = workAttachmentsMapper.selectByWorkId(workId);
+            for (WorkAttachment attachment : attachments) {
+                // 默认发布后附件也应随作品状态可用
+                attachment.setUpdatedAt(LocalDateTime.now());
+                workAttachmentsMapper.updateById(attachment);
+            }
+
+            // 4. 创建统计表 (如果不存在)
+            WorkStats existingStats = workStatsMapper.selectOne(new QueryWrapper<WorkStats>().eq("work_id", workId));
+            if (existingStats == null) {
+                WorkStats workStats = new WorkStats();
+                workStats.setWorkId(workId);
+                workStatsMapper.insert(workStats);
+            }
         }
-        //4.异步发送消息
+        
         return true;
     }
 
@@ -315,15 +388,34 @@ public class WorkServiceImpl implements WorkService {
                     "仅允许修改草稿(0)或审核拒绝(4)状态的作品");
         }
 
-        // 4. 更新字段（排除系统字段）
+        // 4. 处理附件关联关系
+        handleAttachmentRelations(workId, workUpdateDto.getAttachmentIds());
+
+        // 5. 处理标签关联关系
+        handleTagRelations(workId, workUpdateDto.getTags());
+
+        // 6. 更新字段（排除系统字段）
         BeanUtils.copyProperties(workUpdateDto, workInfo,
                 "id", "creator_id", "status", "created_at", "published_at", "deleted_at",
-                "total_revenue", "total_sales", "updated_at");
+                "total_revenue", "total_sales", "updated_at", "coverUrl");
 
-        // 5. 更新时间戳
+        // 特别处理封面图
+        if (StringUtils.isNotBlank(workUpdateDto.getCoverUrl())) {
+            String coverKey = extractKeyFromUrl(workUpdateDto.getCoverUrl());
+            if (coverKey != null) {
+                try {
+                    coverKey = java.net.URLDecoder.decode(coverKey, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                    log.warn("封面Key解码失败", e);
+                }
+            }
+            workInfo.setCoverUrl(coverKey);
+        }
+
+        // 7. 更新时间戳
         workInfo.setUpdatedAt(LocalDateTime.now());
 
-        // 6. 保存更新
+        // 8. 保存更新
         workInfoMapper.updateById(workInfo);
 
         // 7. 异步发送消息
@@ -358,7 +450,153 @@ public class WorkServiceImpl implements WorkService {
         }
         WorkDetailVo workDetailVo = new WorkDetailVo();
         BeanUtils.copyProperties(workInfo, workDetailVo, "create_at");
-        //3.返回作品详情
+        // 处理封面图
+        String coverKey = workInfo.getCoverUrl();
+        if (StringUtils.isNotBlank(coverKey)) {
+             // 尝试提取 ObjectKey (如果数据库存的是完整URL)
+            String objectKey = coverKey;
+            if (coverKey.startsWith("http") && coverKey.contains("/work/")) {
+                try {
+                    int bucketIndex = coverKey.indexOf("/work/");
+                    String path = coverKey.substring(bucketIndex + "/work/".length());
+                    int queryIndex = path.indexOf("?");
+                    if (queryIndex != -1) {
+                        objectKey = path.substring(0, queryIndex);
+                    } else {
+                        objectKey = path;
+                    }
+                    objectKey = java.net.URLDecoder.decode(objectKey, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                    log.warn("尝试从URL提取Key失败: {}", coverKey);
+                }
+            }
+
+            if (!objectKey.startsWith("http")) {
+                // 如果是对象键，生成预签名URL
+                try {
+                    String signedUrl = storageService.getPreSignedUrl("work", objectKey, 1, TimeUnit.HOURS);
+                    workDetailVo.setCoverUrl(signedUrl);
+                } catch (Exception e) {
+                    log.error("生成作品封面预签名URL失败: {}", objectKey, e);
+                    workDetailVo.setCoverUrl(null);
+                }
+            } else {
+                workDetailVo.setCoverUrl(coverKey);
+            }
+        }
+        //3. 获取作者信息
+        User user = userMapper.selectById(workInfo.getCreatorId());
+        if (user != null) {
+            workDetailVo.setAuthorName(user.getUsername());
+            String avatarKey = user.getAvatarUrl();
+            if (StringUtils.isNotBlank(avatarKey)) {
+                if (avatarKey.startsWith("http")) {
+                    workDetailVo.setAuthorAvatar(avatarKey);
+                } else {
+                    try {
+                        String signedUrl = storageService.getPreSignedUrl("avatars", avatarKey, 1, TimeUnit.HOURS);
+                        workDetailVo.setAuthorAvatar(signedUrl);
+                    } catch (Exception e) {
+                        log.error("生成作者头像预签名URL失败: {}", avatarKey, e);
+                        workDetailVo.setAuthorAvatar(null);
+                    }
+                }
+            }
+        }
+
+        // 4. 获取统计数据
+        WorkStats stats = workStatsMapper.selectOne(new QueryWrapper<WorkStats>().eq("work_id", workId));
+        if (stats != null) {
+            workDetailVo.setViewCount(stats.getViewCount());
+            workDetailVo.setLikeCount(stats.getLikeCount());
+            workDetailVo.setCollectCount(stats.getFavoriteCount());
+            workDetailVo.setCommentCount(stats.getCommentCount());
+            workDetailVo.setPurchaseCount(stats.getPurchaseCount());
+        } else {
+            workDetailVo.setViewCount(0);
+            workDetailVo.setLikeCount(0);
+            workDetailVo.setCollectCount(0);
+            workDetailVo.setCommentCount(0);
+            workDetailVo.setPurchaseCount(0);
+        }
+
+        // 5. 返回作品详情
+        return workDetailVo;
+    }
+
+    /**
+     * 获取公开作品详情
+     */
+    @Override
+    public WorkDetailVo getPublicWorkDetail(Long workId, String token) {
+        WorkInfo workInfo = workInfoMapper.selectById(workId);
+        if (workInfo == null || workInfo.getStatus() != Status.PUBLISHED || workInfo.getDeletedAt() != null) {
+            throw new IsArgumentException(ErrorCode.RESOURCE_NOT_FOUND.getHttpStatusCode(), "作品不存在或未公开");
+        }
+
+        // 增加浏览量
+        Long userId = null;
+        if (token != null && !token.isEmpty()) {
+            userId = JwtUtil.getUserIdFromToken(token);
+        }
+        workStateService.incrementViewCount(workId, userId);
+
+        WorkDetailVo workDetailVo = new WorkDetailVo();
+        BeanUtils.copyProperties(workInfo, workDetailVo, "create_at");
+        workDetailVo.setAuthorId(workInfo.getCreatorId());
+        
+        // 处理封面图逻辑 (复用)
+        String coverKey = workInfo.getCoverUrl();
+        if (StringUtils.isNotBlank(coverKey)) {
+            // ... (复用之前的逻辑，简化处理)
+            if (!coverKey.startsWith("http")) {
+                 try {
+                    String signedUrl = storageService.getPreSignedUrl("work", coverKey, 1, TimeUnit.HOURS);
+                    workDetailVo.setCoverUrl(signedUrl);
+                } catch (Exception e) {
+                    workDetailVo.setCoverUrl(null);
+                }
+            } else {
+                workDetailVo.setCoverUrl(coverKey);
+            }
+        }
+
+        // 获取作者信息
+        User user = userMapper.selectById(workInfo.getCreatorId());
+        if (user != null) {
+            workDetailVo.setAuthorName(user.getUsername());
+            String avatarKey = user.getAvatarUrl();
+            if (StringUtils.isNotBlank(avatarKey)) {
+                if (avatarKey.startsWith("http")) {
+                    workDetailVo.setAuthorAvatar(avatarKey);
+                } else {
+                    try {
+                        String signedUrl = storageService.getPreSignedUrl("avatars", avatarKey, 1, TimeUnit.HOURS);
+                        workDetailVo.setAuthorAvatar(signedUrl);
+                    } catch (Exception e) {
+                        workDetailVo.setAuthorAvatar(null);
+                    }
+                }
+            }
+        }
+
+        // 获取统计数据
+        WorkStats stats = workStateService.getWorkStats(workId);
+        if (stats != null) {
+            workDetailVo.setViewCount(stats.getViewCount());
+            workDetailVo.setLikeCount(stats.getLikeCount());
+            workDetailVo.setCollectCount(stats.getFavoriteCount());
+            workDetailVo.setCommentCount(stats.getCommentCount());
+            workDetailVo.setPurchaseCount(stats.getPurchaseCount());
+        }
+
+        // 检查当前用户交互状态
+        if (StringUtils.isNotBlank(token)) {
+            if (userId != null) {
+                workDetailVo.setIsLiked(checkUserAction(userId, workId, TargetType.LIKE));
+                workDetailVo.setIsCollected(checkUserAction(userId, workId, TargetType.COLLECT));
+            }
+        }
 
         return workDetailVo;
     }
@@ -374,7 +612,8 @@ public class WorkServiceImpl implements WorkService {
     @Override
     public Page<WorkSimpleVo> getUserWorks(Long userId, int page, int size) {
         // 1. 获取当前登录用户ID（用于权限判断）
-        Long currentUserId = JwtUtil.getUserIdFromToken(SecurityContextHolder.getContext().getAuthentication().getCredentials().toString());
+        String auth = SecurityContextHolder.getContext().getAuthentication().getCredentials().toString();
+        Long currentUserId = JwtUtil.getUserIdFromToken(auth);
 
         // 2. 构建查询条件
         QueryWrapper<WorkInfo> queryWrapper = new QueryWrapper<>();
@@ -389,34 +628,167 @@ public class WorkServiceImpl implements WorkService {
                 queryWrapper
         );
 
-        // 4. 构建VO列表（根据当前用户权限过滤）
-        List<WorkSimpleVo> vos = workPage.getRecords().stream().map(work -> {
-            WorkSimpleVo vo = new WorkSimpleVo();
-            // 如果是当前用户，返回完整字段
-            if (currentUserId != null && currentUserId.equals(work.getCreatorId())) {
-               vo.setTitle(work.getTitle());
-               vo.setDescription(work.getDescription());
-               vo.setCoverUrl(work.getCoverUrl());
-               vo.setType(work.getType());
-               vo.setPrice(work.getPrice());
-               vo.setPublishedAt(work.getPublishedAt());
-            } else {
-                // 非作者用户，根据visibility过滤
-                if (work.getVisibility() == Visibility.PUBLIC) { // 公开
-                    // 保留公开字段
-                } else {
-                    // 非公开作品不返回给非作者
-                    return null;
-                }
-            }
-            return vo;
-        }).filter(Objects::nonNull).collect(Collectors.toList());
+        // 4. 构建VO列表
+        List<WorkSimpleVo> vos = workPage.getRecords().stream()
+                .map(work -> convertToSimpleVo(work, currentUserId))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
 
         Page<WorkSimpleVo> resultPage = new Page<>(workPage.getCurrent(), workPage.getSize(), workPage.getTotal());
         resultPage.setRecords(vos);
         return resultPage;
     }
 
+    @Override
+    public Page<WorkSimpleVo> getPublicWorks(int page, int size, String token) {
+        Long currentUserId = JwtUtil.getUserIdFromToken(token);
+        QueryWrapper<WorkInfo> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("status", Status.PUBLISHED)
+                .eq("visibility", Visibility.PUBLIC)
+                .isNull("deleted_at")
+                .orderByDesc("published_at");
+
+        Page<WorkInfo> workPage = workInfoMapper.selectPage(new Page<>(page, size), queryWrapper);
+
+        List<WorkSimpleVo> vos = workPage.getRecords().stream()
+                .map(work -> convertToSimpleVo(work, currentUserId))
+                .collect(Collectors.toList());
+
+        Page<WorkSimpleVo> resultPage = new Page<>(workPage.getCurrent(), workPage.getSize(), workPage.getTotal());
+        resultPage.setRecords(vos);
+        return resultPage;
+    }
+
+    @Override
+    public Page<WorkSimpleVo> searchWorks(String keyword, int page, int size, String token) {
+        Long currentUserId = JwtUtil.getUserIdFromToken(token);
+        QueryWrapper<WorkInfo> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("status", Status.PUBLISHED)
+                .eq("visibility", Visibility.PUBLIC)
+                .isNull("deleted_at")
+                .and(qw -> qw.like("title", keyword).or().like("description", keyword))
+                .orderByDesc("published_at");
+
+        Page<WorkInfo> workPage = workInfoMapper.selectPage(new Page<>(page, size), queryWrapper);
+
+        List<WorkSimpleVo> vos = workPage.getRecords().stream()
+                .map(work -> convertToSimpleVo(work, currentUserId))
+                .collect(Collectors.toList());
+
+        Page<WorkSimpleVo> resultPage = new Page<>(workPage.getCurrent(), workPage.getSize(), workPage.getTotal());
+        resultPage.setRecords(vos);
+        return resultPage;
+    }
+
+    private WorkSimpleVo convertToSimpleVo(WorkInfo work, Long currentUserId) {
+        // 权限检查
+        if (work.getVisibility() != Visibility.PUBLIC) {
+            if (currentUserId == null || !currentUserId.equals(work.getCreatorId())) {
+                return null;
+            }
+        }
+
+        WorkSimpleVo vo = new WorkSimpleVo();
+        BeanUtils.copyProperties(work, vo);
+        vo.setWorkId(work.getWorkId());
+        vo.setAccessStrategy(work.getAccessStrategy() != null ? work.getAccessStrategy().name() : null);
+
+        // 获取作者信息
+        User user = userMapper.selectById(work.getCreatorId());
+        if (user != null) {
+            vo.setAuthorId(user.getUserId());
+            vo.setAuthorName(user.getUsername());
+            
+            // 处理作者头像 URL
+            String avatarKey = user.getAvatarUrl();
+            if (StringUtils.isNotBlank(avatarKey)) {
+                if (avatarKey.startsWith("http")) {
+                    vo.setAuthorAvatar(avatarKey);
+                } else {
+                    try {
+                        String signedUrl = storageService.getPreSignedUrl("avatars", avatarKey, 1, TimeUnit.HOURS);
+                        vo.setAuthorAvatar(signedUrl);
+                    } catch (Exception e) {
+                        log.error("生成作者头像预签名URL失败: {}", avatarKey, e);
+                        vo.setAuthorAvatar(null);
+                    }
+                }
+            }
+        }
+
+        // 处理作品封面 URL
+        String coverKey = work.getCoverUrl();
+        if (StringUtils.isNotBlank(coverKey)) {
+            // 尝试提取 ObjectKey (如果数据库存的是完整URL)
+            String objectKey = coverKey;
+            if (coverKey.startsWith("http") && coverKey.contains("/work/")) {
+                try {
+                    int bucketIndex = coverKey.indexOf("/work/");
+                    String path = coverKey.substring(bucketIndex + "/work/".length());
+                    int queryIndex = path.indexOf("?");
+                    if (queryIndex != -1) {
+                        objectKey = path.substring(0, queryIndex);
+                    } else {
+                        objectKey = path;
+                    }
+                    // URL解码 (处理空格等特殊字符)
+                    objectKey = java.net.URLDecoder.decode(objectKey, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                    log.warn("尝试从URL提取Key失败: {}", coverKey);
+                }
+            }
+
+            if (!objectKey.startsWith("http")) {
+                // 如果是对象键，生成预签名URL
+                try {
+                    String signedUrl = storageService.getPreSignedUrl("work", objectKey, 1, TimeUnit.HOURS);
+                    vo.setCoverUrl(signedUrl);
+                } catch (Exception e) {
+                    log.error("生成作品封面预签名URL失败: {}", objectKey, e);
+                    vo.setCoverUrl(null);
+                }
+            } else {
+                // 无法提取Key或本来就是外部URL，直接透传
+                vo.setCoverUrl(coverKey);
+            }
+        }
+
+        // 获取统计数据
+        WorkStats stats = workStateService.getWorkStats(work.getWorkId());
+        if (stats != null) {
+            vo.setViewCount(stats.getViewCount());
+            vo.setLikeCount(stats.getLikeCount());
+            vo.setCollectCount(stats.getFavoriteCount());
+            vo.setCommentCount(stats.getCommentCount());
+            vo.setPurchaseCount(stats.getPurchaseCount());
+        } else {
+            vo.setViewCount(0);
+            vo.setLikeCount(0);
+            vo.setCollectCount(0);
+            vo.setCommentCount(0);
+            vo.setPurchaseCount(0);
+        }
+
+        // 填充用户是否点赞/收藏状态
+        if (currentUserId != null) {
+            vo.setIsLiked(checkUserAction(currentUserId, work.getWorkId(), TargetType.LIKE));
+            vo.setIsCollected(checkUserAction(currentUserId, work.getWorkId(), TargetType.COLLECT));
+        } else {
+            vo.setIsLiked(false);
+            vo.setIsCollected(false);
+        }
+
+        return vo;
+    }
+
+    private Boolean checkUserAction(Long userId, Long workId, TargetType type) {
+        QueryWrapper<ForumUserActions> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("user_id", userId)
+                .eq("target_type", type)
+                .eq("target_id", workId)
+                .eq("is_active", 1);
+        return userActionsMapper.exists(queryWrapper);
+    }
 
     /**
      * 上传封面图
@@ -426,7 +798,7 @@ public class WorkServiceImpl implements WorkService {
      * @return
      */
     @Override
-    public String uploadCover(MultipartFile file, String token) {
+    public String uploadCover(MultipartFile file, String token, Long workId) {
         // 1. 验证token权限
         Long userId = JwtUtil.getUserIdFromToken(token);
         if (userId == null) throw new IsArgumentException("无效token");
@@ -439,25 +811,46 @@ public class WorkServiceImpl implements WorkService {
             throw new IsArgumentException("仅支持JPG/PNG/GIF格式封面图");
         }
 
-        // 3. 校验图片尺寸（示例：宽高不超过2000px）
-        BufferedImage image;
-        try {
-            image = ImageIO.read(file.getInputStream());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        if (image.getWidth() > 2000 || image.getHeight() > 2000) {
-            throw new IsArgumentException("封面图尺寸不得超过2000x2000像素");
+        // 3. 校验图片大小（不超过 10MB）
+        if (file.getSize() > 10 * 1024 * 1024) {
+            throw new IsArgumentException("封面图大小不得超过 10MB");
         }
 
-        // 4. 上传到MinIO（封面图独立存储路径）
-        String bucketName = "covers";
-        String objectKey = "covers/" + UUID.randomUUID() + "." +
-                FilenameUtils.getExtension(file.getOriginalFilename());
+        // 4. 上传到MinIO（名为work的桶，work-cover文件夹）
+        String bucketName = "work";
+        String extension = FilenameUtils.getExtension(file.getOriginalFilename());
+        String objectKey = "work-cover/work-cover_" + (workId != null ? workId : "unknown") + "_" + userId + "_" + System.currentTimeMillis() + "." + extension;
         storageService.upload(file, bucketName, objectKey);
 
         // 5. 返回预签名URL（有效期5分钟）
-        String coverUrl = storageService.getPreSignedUrl(bucketName, objectKey, 5, TimeUnit.MINUTES);
-        return coverUrl;
+        // 注意：前端拿到这个URL后预览，保存草稿时会将此URL传回。
+        // createDraft/updateDraft 必须负责从URL中提取Key进行存储，否则URL过期后无法访问。
+        return storageService.getPreSignedUrl(bucketName, objectKey, 5, TimeUnit.MINUTES);
+    }
+
+    /**
+     * 从MinIO预签名URL中提取ObjectKey
+     */
+    private String extractKeyFromUrl(String url) {
+        if (StringUtils.isBlank(url)) return null;
+        // 如果本身不包含http，假设它已经是Key
+        if (!url.startsWith("http")) return url;
+        
+        try {
+            // 假设URL结构包含 /work/ (bucket name)
+            int bucketIndex = url.indexOf("/work/");
+            if (bucketIndex != -1) {
+                String path = url.substring(bucketIndex + "/work/".length());
+                int queryIndex = path.indexOf("?");
+                if (queryIndex != -1) {
+                    return path.substring(0, queryIndex);
+                }
+                return path;
+            }
+        } catch (Exception e) {
+            log.warn("解析封面URL失败: {}", url);
+        }
+        // 解析失败返回原值，由后续逻辑处理
+        return url;
     }
 }

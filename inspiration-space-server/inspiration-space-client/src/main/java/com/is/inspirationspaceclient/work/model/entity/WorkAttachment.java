@@ -23,7 +23,7 @@ public class WorkAttachment implements Serializable {
     /**
      * 附件ID
      */
-    @TableId(value = "id", type = IdType.AUTO)
+    @TableId(value = "id", type = IdType.ASSIGN_ID)
     private Long id;
 
     /**

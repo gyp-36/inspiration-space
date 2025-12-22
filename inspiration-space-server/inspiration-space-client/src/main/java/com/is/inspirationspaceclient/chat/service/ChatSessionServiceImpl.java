@@ -376,7 +376,7 @@ public class ChatSessionServiceImpl implements ChatSessionService {
                 new QueryWrapper<ChatSession>()
                         .in("session_id", sessionIds)
                         .eq("session_status", SessionStatus.NORMAL)
-                        .orderByDesc("updated_at")  // 按更新时间倒序排列
+                        .orderByDesc("created_at")  // 按创建时间倒序排列
         );
 
         return sessions.stream().map(session -> {
@@ -392,7 +392,7 @@ public class ChatSessionServiceImpl implements ChatSessionService {
         ChatMessage lastMessage = chatMessageMapper.selectOne(
                 new QueryWrapper<ChatMessage>()
                         .eq("session_id", sessionId)
-                        .orderByDesc("timestamp")
+                        .orderByDesc("sent_at")
                         .last("LIMIT 1")
         );
         return lastMessage != null ? lastMessage.getContent() : "";
@@ -516,8 +516,8 @@ public class ChatSessionServiceImpl implements ChatSessionService {
 
         List<User> allUsers = userMapper.selectList(
                 new QueryWrapper<User>()
-                        .select("id", "username", "avatar")
-                        .in("id", userIds)
+                        .select("user_id", "username", "avatar_url")
+                        .in("user_id", userIds)
         );
 
         // 将用户信息转换为Map便于查找

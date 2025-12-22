@@ -1,5 +1,6 @@
 package com.is.inspirationspaceclient.work.model.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.is.inspirationspaceclient.work.model.entity.enums.AccessStrategy;
 import com.is.inspirationspaceclient.work.model.entity.enums.Visibility;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 @Schema(description = "作品信息")
 public class WorkCreateDto implements Serializable {
     @Serial
@@ -48,5 +50,8 @@ public class WorkCreateDto implements Serializable {
 
     @Schema(name = "attachmentIds", type = "List<Long>", description = "附件ID列表")
     private List<Long> attachmentIds;
+
+    @Schema(name = "tags", type = "List<String>", description = "标签名称列表")
+    private List<String> tags;
 
 }

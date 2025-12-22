@@ -19,7 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 public interface WorkService  {
 
-    Boolean createDraft(String token, WorkCreateDto workCreateDto);
+    Long createDraft(String token, WorkCreateDto workCreateDto);
 
     Boolean updateDraft(Long workId, String token, WorkCreateDto workCreateDto);
 
@@ -31,7 +31,13 @@ public interface WorkService  {
 
     WorkDetailVo getWorkDetail(String token, Long workId);
 
+    WorkDetailVo getPublicWorkDetail(Long workId, String token);
+
     Page<WorkSimpleVo> getUserWorks(Long userId, int page, int size);
 
-    String uploadCover(MultipartFile file, String token);
+    Page<WorkSimpleVo> getPublicWorks(int page, int size, String token);
+
+    Page<WorkSimpleVo> searchWorks(String keyword, int page, int size, String token);
+
+    String uploadCover(MultipartFile file, String token, Long workId);
 }

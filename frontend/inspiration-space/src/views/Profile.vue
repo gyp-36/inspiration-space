@@ -30,39 +30,40 @@
           </div>
 
           <div class="header-info-stats">
-            <div class="info-left">
-              <!-- 用户名与统计数据并行 -->
-              <div class="user-main-row">
-                <h2 class="username">{{ stats.username || profile.username || '未设置用户名' }}</h2>
-                <!-- 数据统计移至此处 -->
-                <div class="user-stats header-stats">
-                  <div class="stat-item">
-                    <span class="count">{{ stats.followingsCount || 0 }}</span>
-                    <span class="label">关注</span>
-                  </div>
-                  <div class="stat-divider"></div>
-                  <div class="stat-item">
-                    <span class="count">{{ stats.fansCount || 0 }}</span>
-                    <span class="label">粉丝</span>
-                  </div>
-                  <div class="stat-divider"></div>
-                  <div class="stat-item">
-                    <span class="count">{{ stats.likesCount || 0 }}</span>
-                    <span class="label">获赞</span>
-                  </div>
-                  <div class="stat-divider"></div>
-                  <div class="stat-item">
-                    <span class="count">{{ stats.favoritesCount || 0 }}</span>
-                    <span class="label">收藏</span>
-                  </div>
-                  <div class="stat-divider"></div>
-                  <div class="stat-item">
-                    <span class="count">{{ postsCount || 0 }}</span>
-                    <span class="label">发布</span>
-                  </div>
+            <!-- 1. 用户名与简介 (紧靠头像右侧) -->
+            <div class="user-info-side">
+              <h2 class="username">{{ stats.username || profile.username || '未设置用户名' }}</h2>
+              <p class="bio" :title="stats.bio || profile.bio">{{ stats.bio || profile.bio || '这个人很懒，什么都没有写~' }}</p>
+            </div>
+
+            <!-- 2. 数据统计 (保持在最右侧) -->
+            <div class="user-stats-side">
+              <div class="user-stats header-stats">
+                <div class="stat-item">
+                  <span class="count">{{ stats.followingsCount || 0 }}</span>
+                  <span class="label">关注</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item">
+                  <span class="count">{{ stats.fansCount || 0 }}</span>
+                  <span class="label">粉丝</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item">
+                  <span class="count">{{ stats.likesCount || 0 }}</span>
+                  <span class="label">获赞</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item">
+                  <span class="count">{{ stats.favoritesCount || 0 }}</span>
+                  <span class="label">收藏</span>
+                </div>
+                <div class="stat-divider"></div>
+                <div class="stat-item">
+                  <span class="count">{{ postsCount || 0 }}</span>
+                  <span class="label">发布</span>
                 </div>
               </div>
-              <p class="bio" :title="stats.bio || profile.bio">{{ stats.bio || profile.bio || '这个人很懒，什么都没有写~' }}</p>
             </div>
           </div>
         </div>
@@ -121,7 +122,7 @@
                   <div class="info-grid">
                     <div class="info-item-box">
                       <span class="label">账户余额</span>
-                      <span class="value highlight">{{ extend.balance || 0 }} 元</span>
+                      <span class="value highlight">{{ formatBalance(extend.balance) }} 元</span>
                     </div>
                     <div class="info-item-box">
                       <span class="label">信誉分</span>
@@ -130,7 +131,7 @@
                     <div class="info-item-box">
                       <span class="label">状态</span>
                       <span class="value">
-                        <el-tag :type="extend.userStatus === 1 ? 'success' : 'danger'" size="small" effect="light">
+                        <el-tag :type="getStatusType(extend.userStatus)" size="small" effect="light">
                           {{ formatUserStatus(extend.userStatus) }}
                         </el-tag>
                       </span>
@@ -147,8 +148,33 @@
             </el-tab-pane>
 
             <el-tab-pane label="我的收藏" name="collection">
-              <div class="tab-content">
-                <el-empty description="暂无收藏内容～" :image-size="200" />
+              <div class="tab-content collection-panel">
+                <div v-if="collectionPosts.length > 0" class="collection-grid">
+                  <div v-for="post in collectionPosts" :key="post.postId" class="grid-item">
+                    <PostCard 
+                      v-bind="post" 
+                      :id="post.postId"
+                      :hideFooter="true"
+                      class="mini-card"
+                      @card-clicked="handleCardClick"
+                    />
+                  </div>
+                </div>
+                
+                <div v-if="collectionPosts.length > 0" class="pagination-wrapper">
+                  <el-pagination
+                    v-model:current-page="collectionPage"
+                    :page-size="collectionPageSize"
+                    layout="prev, pager, next"
+                    :total="collectionTotal"
+                    @current-change="handleCollectionPageChange"
+                  />
+                </div>
+
+                <el-empty v-else-if="!collectionLoading" description="暂无收藏内容～" :image-size="200" />
+                <div v-else class="loading-placeholder">
+                   <el-skeleton :rows="5" animated />
+                </div>
               </div>
             </el-tab-pane>
 
@@ -221,6 +247,36 @@
           </div>
         </template>
       </el-dialog>
+
+      <!-- 修改密码弹窗 -->
+      <el-dialog title="修改密码" v-model="passwordDialogVisible" width="450px" destroy-on-close align-center class="custom-dialog">
+        <div class="dialog-header-tip">
+          为了您的账号安全，请定期修改密码
+        </div>
+        <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordFormRules" label-width="100px" label-position="top">
+          <el-form-item label="旧密码" prop="oldPassword">
+            <el-input v-model="passwordForm.oldPassword" type="password" show-password placeholder="请输入当前使用的密码">
+              <template #prefix><el-icon><Lock /></el-icon></template>
+            </el-input>
+          </el-form-item>
+          <el-form-item label="新密码" prop="newPassword">
+            <el-input v-model="passwordForm.newPassword" type="password" show-password placeholder="请输入新密码（不少于6位）">
+              <template #prefix><el-icon><Lock /></el-icon></template>
+            </el-input>
+          </el-form-item>
+          <el-form-item label="确认新密码" prop="confirmPassword">
+            <el-input v-model="passwordForm.confirmPassword" type="password" show-password placeholder="请再次输入新密码">
+              <template #prefix><el-icon><Lock /></el-icon></template>
+            </el-input>
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="closePasswordForm" class="footer-btn">取消</el-button>
+            <el-button type="primary" @click="submitPasswordForm" :loading="submitting" class="footer-btn save-btn">确认修改</el-button>
+          </div>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
@@ -229,9 +285,13 @@
 import { ElMessage } from 'element-plus';
 import { Camera, Edit, Lock, User, Message, Calendar, Postcard, Male, Female } from '@element-plus/icons-vue';
 import { ref, onMounted, reactive, computed } from 'vue';
-import { getUser, getUserProfileInfo, getUserExtendInfo, updateUserInfo, updateAvatar } from '@/services/userService';
+import { useRouter } from 'vue-router';
+import PostCard from '@/components/forum/PostCard.vue';
+import { getUser, getUserProfileInfo, getUserExtendInfo, updateUserInfo, updateAvatar, updatePassword, getAvatar } from '@/services/userService';
+import { getCollectedPosts } from '@/services/forumService';
 
 // ========== 状态 ==========
+const router = useRouter();
 const activeKey = ref('info');
 const profile = ref({});
 const extend = ref({});
@@ -240,9 +300,18 @@ const postsCount = ref(0);
 const loading = ref(true);
 const submitting = ref(false);
 const fileInputRef = ref(null);
+const fetchedAvatarUrl = ref('');
+
+// 收藏相关
+const collectionPosts = ref([]);
+const collectionPage = ref(1);
+const collectionTotal = ref(0);
+const collectionLoading = ref(false);
+const collectionPageSize = ref(15);
 
 // 头像URL
 const avatarUrl = computed(() => {
+  if (fetchedAvatarUrl.value) return fetchedAvatarUrl.value;
   const url = profile.value.avatarUrl || profile.value.avatar || stats.value.avatarUrl;
   if (url) return url;
   
@@ -269,6 +338,36 @@ const editFormRules = {
   ]
 };
 
+// 修改密码相关
+const passwordDialogVisible = ref(false);
+const passwordFormRef = ref(null);
+const passwordForm = reactive({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+});
+
+const passwordFormRules = {
+  oldPassword: [{ required: true, message: '请输入旧密码', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入新密码', trigger: 'blur' },
+    {
+      validator: (rule, value, callback) => {
+        if (value !== passwordForm.newPassword) {
+          callback(new Error('两次输入的密码不一致'));
+        } else {
+          callback();
+        }
+      },
+      trigger: 'blur'
+    }
+  ]
+};
+
 // ========== API Methods ==========
 const fetchAllUserInfo = async () => {
   loading.value = true;
@@ -277,10 +376,12 @@ const fetchAllUserInfo = async () => {
     
     // 按照用户要求，上半部分调用 getUser 接口
     // 同时为了保证下半部分“基本资料”和“账户安全”正常显示，我们需要调用对应的详细信息接口
-    const [userVo, profileInfo, extendInfo] = await Promise.all([
+    // 新增：调用 getAvatar 接口获取头像
+    const [userVo, profileInfo, extendInfo, avatarData] = await Promise.all([
       getUser(userId),
       getUserProfileInfo(userId),
-      getUserExtendInfo(userId)
+      getUserExtendInfo(userId),
+      getAvatar(userId)
     ]);
     
     // stats 包含：followingsCount, fansCount, likesCount, favoritesCount, postsCount
@@ -292,6 +393,11 @@ const fetchAllUserInfo = async () => {
     
     // extend 包含：balance, creditScore, userStatus
     extend.value = extendInfo || {};
+
+    // 设置头像
+    if (avatarData) {
+      fetchedAvatarUrl.value = avatarData;
+    }
 
     if (stats.value.favoritesCount === undefined) {
        stats.value.favoritesCount = 0; 
@@ -377,11 +483,69 @@ const submitEditForm = async () => {
 };
 
 const handleTabClick = (tab) => {
-  // 可以处理tab切换逻辑
+  if (tab.paneName === 'collection') {
+    // 切换到收藏时自动加载，如果已经有数据则不重复加载（除非需要强制刷新）
+    if (collectionPosts.value.length === 0) {
+      fetchCollection(1);
+    }
+  }
+};
+
+const fetchCollection = async (page = 1) => {
+  collectionLoading.value = true;
+  try {
+    const res = await getCollectedPosts(page, collectionPageSize.value);
+    collectionPosts.value = res.records || [];
+    collectionTotal.value = res.total || 0;
+    collectionPage.value = page;
+  } catch (err) {
+    console.error('获取收藏失败', err);
+    ElMessage.error('获取收藏内容失败');
+  } finally {
+    collectionLoading.value = false;
+  }
+};
+
+const handleCollectionPageChange = (page) => {
+  fetchCollection(page);
+};
+
+const handleCardClick = (postId) => {
+  router.push(`/forum/${postId}`);
 };
 
 const handlePasswordChange = () => {
-  ElMessage.info('修改密码功能开发中...');
+  passwordForm.oldPassword = '';
+  passwordForm.newPassword = '';
+  passwordForm.confirmPassword = '';
+  passwordDialogVisible.value = true;
+};
+
+const closePasswordForm = () => {
+  passwordDialogVisible.value = false;
+};
+
+const submitPasswordForm = async () => {
+  if (!passwordFormRef.value) return;
+  await passwordFormRef.value.validate(async (valid) => {
+    if (valid) {
+      submitting.value = true;
+      try {
+        const userId = localStorage.getItem('userId') || 1;
+        await updatePassword({
+          userId: Number(userId),
+          oldPassword: passwordForm.oldPassword,
+          newPassword: passwordForm.newPassword
+        });
+        ElMessage.success('密码修改成功');
+        closePasswordForm();
+      } catch (err) {
+        ElMessage.error(err.message || '密码修改失败');
+      } finally {
+        submitting.value = false;
+      }
+    }
+  });
 };
 
 // Helpers
@@ -391,12 +555,37 @@ const formatGender = (val) => {
 };
 
 const formatUserStatus = (status) => {
-  const map = { 1: '正常', 2: '禁用', 3: '冻结' };
+  if (status === undefined || status === null) return '未知';
+  
+  // 支持数字和字符串枚举名
+  const map = { 
+    0: '正常', 'NORMAL': '正常', 'normal': '正常',
+    1: '禁言', 'DISABLED_SPEAKING': '禁言', 'disabled_speaking': '禁言',
+    2: '封禁', 'BANNED': '封禁', 'banned': '封禁',
+    3: '删除', 'DELETED': '删除', 'deleted': '删除'
+  };
   return map[status] || '未知';
+};
+
+const getStatusType = (status) => {
+  if (status === undefined || status === null) return 'info';
+  
+  const map = { 
+    0: 'success', 'NORMAL': 'success', 'normal': 'success',
+    1: 'warning', 'DISABLED_SPEAKING': 'warning', 'disabled_speaking': 'warning',
+    2: 'danger', 'BANNED': 'danger', 'banned': 'danger',
+    3: 'info', 'DELETED': 'info', 'deleted': 'info'
+  };
+  return map[status] || 'info';
 };
 
 const formatDateTime = (dateStr) => {
   return dateStr ? dateStr.replace('T', ' ').substring(0, 19) : '-';
+};
+
+const formatBalance = (val) => {
+  if (val === undefined || val === null) return '0.00';
+  return Number(val).toFixed(2);
 };
 
 onMounted(() => {
@@ -429,9 +618,59 @@ onMounted(() => {
 
 /* 封面图 */
 .profile-banner {
-  height: 240px; /* 放大高度 */
+  height: 280px;
   position: relative;
   overflow: hidden;
+}
+
+.collection-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: flex-start;
+  padding-bottom: 10px;
+}
+
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  padding: 10px 0;
+}
+
+.grid-item {
+  width: 100%;
+}
+
+.mini-card {
+  transform: scale(0.95);
+  transform-origin: top left;
+  width: 105.26%; /* 1 / 0.95 to compensate for scale */
+  margin-bottom: -10px; /* Offset for scale */
+}
+
+.mini-card :deep(.post-title) {
+  font-size: 14px;
+}
+
+.mini-card :deep(.post-content) {
+  font-size: 12px;
+  -webkit-line-clamp: 2;
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: 30px;
+  padding-bottom: 20px;
+}
+
+.loading-placeholder {
+  padding: 40px;
 }
 
 .profile-banner img {
@@ -511,13 +750,21 @@ onMounted(() => {
 .header-info-stats {
   flex: 1;
   padding-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-.user-main-row {
+.user-info-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-left: 20px; /* 紧靠头像右侧 */
+}
+
+.user-stats-side {
   display: flex;
   align-items: center;
-  gap: 30px;
-  margin-bottom: 15px;
 }
 
 .username {
@@ -527,20 +774,20 @@ onMounted(() => {
   margin: 0;
 }
 
-/* 头部统计项 */
-.header-stats {
-  background: rgba(255, 255, 255, 0.5);
-  padding: 8px 20px;
-  border-radius: 50px;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-}
-
 .bio {
   font-size: 16px;
   color: #7f8c8d;
   margin: 0;
   line-height: 1.6;
-  max-width: 600px;
+  max-width: 400px;
+}
+
+/* 头部统计项 - 去掉背景和圆形边框 */
+.header-stats {
+  background: transparent;
+  padding: 8px 0;
+  border-radius: 0;
+  border: none;
 }
 
 /* 统计项样式 */
@@ -860,5 +1107,39 @@ onMounted(() => {
   .form-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* 收藏面板样式 */
+.collection-panel {
+  padding: 20px 0;
+}
+
+.collection-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  padding: 10px 0;
+}
+
+.grid-item {
+  display: flex;
+  justify-content: center;
+}
+
+.mini-card {
+  transform: scale(0.85);
+  transform-origin: top center;
+  width: 100%;
+  margin: -20px 0; /* 抵消缩放带来的空白 */
+}
+
+.pagination-wrapper {
+  margin-top: 40px;
+  display: flex;
+  justify-content: center;
+}
+
+.loading-placeholder {
+  padding: 40px 0;
 }
 </style>

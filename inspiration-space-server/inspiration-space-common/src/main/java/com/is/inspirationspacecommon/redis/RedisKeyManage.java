@@ -39,7 +39,8 @@ public enum RedisKeyManage {
 
     // 在 RedisKeyManage 枚举中添加以下
     OFFLINE_MESSAGE_STREAM("offline_message_stream:%s", "离线消息Stream", "按receiverId分组的离线消息Stream"),
-    OFFLINE_MESSAGE_CONSUMER_GROUP("offline_message_group", "离线消息消费组", "处理离线消息的消费组");
+    OFFLINE_MESSAGE_CONSUMER_GROUP("offline_message_group", "离线消息消费组", "处理离线消息的消费组"),
+    WORK_VIEW_HISTORY("work_view_history:%s", "作品浏览记录", "Set集合，存储看过该作品的用户ID");
 
     /**
      * key值

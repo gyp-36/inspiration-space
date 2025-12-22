@@ -16,17 +16,8 @@
         </div>
       </div>
       <div class="chat-actions">
-        <el-tooltip content="语音通话" placement="bottom" v-if="session.sessionType === 'PRIVATE'">
-          <button class="icon-btn"><el-icon><Phone /></el-icon></button>
-        </el-tooltip>
-        <el-tooltip content="视频通话" placement="bottom" v-if="session.sessionType === 'PRIVATE'">
-          <button class="icon-btn"><el-icon><VideoCamera /></el-icon></button>
-        </el-tooltip>
         <el-tooltip content="搜索消息" placement="bottom">
           <button class="icon-btn" @click="showSearchDialog = true"><el-icon><Search /></el-icon></button>
-        </el-tooltip>
-        <el-tooltip content="群成员" placement="bottom" v-if="session.sessionType === 'GROUP'">
-          <button class="icon-btn" @click="showGroupMembers"><el-icon><User /></el-icon></button>
         </el-tooltip>
         <el-dropdown trigger="click" @command="handleAction">
           <button class="icon-btn"><el-icon><MoreFilled /></el-icon></button>
@@ -356,20 +347,19 @@ onMounted(scrollToBottom)
   display: flex;
   flex-direction: column;
   height: 100%;
-  background-color: #f5f7f9;
+  background-color: #f5f5f5;
   overflow: hidden;
 }
 
 .chat-header {
-  height: 64px;
+  height: 60px;
   padding: 0 20px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid #eef1f5;
+  background: #ffffff;
+  border-bottom: 1px solid #f0f0f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  z-index: 10;
+  flex-shrink: 0;
 }
 
 .session-info {
@@ -379,38 +369,36 @@ onMounted(scrollToBottom)
 }
 
 .session-avatar img {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
   object-fit: cover;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 .session-name {
   font-size: 16px;
   font-weight: 600;
-  color: #1f2d3d;
+  color: #333;
 }
 
 .session-status {
   font-size: 12px;
-  color: #909399;
+  color: #999;
   display: flex;
   align-items: center;
-  gap: 6px;
+  margin-top: 2px;
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #c0c4cc;
+  background-color: #ccc;
+  margin-right: 6px;
 }
 
 .status-dot.online {
-  background: #67c23a;
-  box-shadow: 0 0 0 2px rgba(103, 194, 58, 0.2);
+  background-color: #52c41a;
 }
 
 .chat-actions {
@@ -419,68 +407,46 @@ onMounted(scrollToBottom)
 }
 
 .icon-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  background: none;
   border: none;
-  background: transparent;
-  color: #606266;
+  padding: 8px;
   cursor: pointer;
+  color: #666;
+  border-radius: 4px;
+  transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
 }
 
 .icon-btn:hover {
-  background: #f0f2f5;
-  color: #409eff;
+  background-color: #f0f0f0;
+  color: #333;
 }
 
 .message-container {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
-  scroll-behavior: smooth;
+  background-color: #f5f5f5;
 }
-
-/* 滚动条美化 */
-.message-container::-webkit-scrollbar { width: 6px; }
-.message-container::-webkit-scrollbar-thumb { background: #dcdfe6; border-radius: 3px; }
-.message-container::-webkit-scrollbar-track { background: transparent; }
 
 .message-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .time-divider {
   text-align: center;
-  margin: 20px 0;
-  position: relative;
+  margin: 10px 0;
 }
 
 .time-divider span {
-  background: #f5f7f9;
-  padding: 4px 12px;
   font-size: 12px;
-  color: #909399;
-  border-radius: 20px;
-  position: relative;
-  z-index: 1;
-}
-
-.system-message {
-  text-align: center;
-}
-
-.system-message span {
-  display: inline-block;
-  background: #ebedf0;
-  padding: 4px 12px;
-  font-size: 12px;
-  color: #606266;
+  color: #999;
+  background: rgba(0,0,0,0.05);
+  padding: 2px 8px;
   border-radius: 4px;
 }
 
@@ -495,12 +461,14 @@ onMounted(scrollToBottom)
   flex-direction: row-reverse;
 }
 
+.other-message {
+  align-self: flex-start;
+}
+
 .message-avatar img {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  border-radius: 6px;
 }
 
 .message-content-wrapper {
@@ -511,53 +479,62 @@ onMounted(scrollToBottom)
 
 .sender-name {
   font-size: 12px;
-  color: #909399;
+  color: #999;
   margin-left: 4px;
+}
+
+.own-message .sender-name {
+  text-align: right;
+  margin-right: 4px;
 }
 
 .message-bubble {
   padding: 10px 14px;
-  border-radius: 16px;
+  border-radius: 8px;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   position: relative;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-  word-break: break-word;
-}
-
-.own-bubble {
-  background: #409eff;
-  color: #fff;
-  border-top-right-radius: 4px;
+  word-break: break-all;
 }
 
 .other-bubble {
-  background: #fff;
-  color: #303133;
-  border-top-left-radius: 4px;
+  background-color: #ffffff;
+  color: #333;
+  border-top-left-radius: 2px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.own-bubble {
+  background-color: #95ec69;
+  color: #000;
+  border-top-right-radius: 2px;
 }
 
 .message-meta {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 6px;
   margin-top: 4px;
-  font-size: 10px;
-  opacity: 0.7;
+  font-size: 11px;
+  color: rgba(0,0,0,0.3);
 }
 
-.status-icons {
-  display: flex;
-  align-items: center;
+.own-message .message-meta {
+  justify-content: flex-end;
 }
 
-.status-read { color: #67c23a; }
-.status-error { color: #f56c6c; }
+.input-container {
+  border-top: 1px solid #f0f0f0;
+  background: #fff;
+}
 
-.image-message .chat-image {
-  border-radius: 8px;
+/* 消息类型样式 */
+.image-message {
   max-width: 300px;
+}
+
+.chat-image {
+  border-radius: 4px;
   display: block;
 }
 
@@ -565,76 +542,71 @@ onMounted(scrollToBottom)
   display: flex;
   align-items: center;
   gap: 12px;
-  background: rgba(255,255,255,0.1);
-  padding: 8px;
+  background: #fff;
+  padding: 12px;
   border-radius: 8px;
+  border: 1px solid #eee;
+  min-width: 200px;
 }
 
-.other-bubble .file-message { background: #f5f7fa; }
-
 .file-icon {
-  width: 40px;
-  height: 40px;
-  background: #409eff;
-  color: #fff;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
+  font-size: 32px;
+  color: #409eff;
 }
 
 .file-info {
   flex: 1;
-  min-width: 120px;
+  min-width: 0;
 }
 
 .file-name {
-  font-size: 13px;
   font-weight: 500;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-size {
-  font-size: 11px;
-  opacity: 0.8;
+  font-size: 12px;
+  color: #999;
 }
 
-.highlight-flash {
-  animation: flash 2s;
+.system-message {
+  text-align: center;
+  margin: 10px 0;
 }
 
-@keyframes flash {
-  0% { background-color: rgba(64, 158, 255, 0.2); }
-  100% { background-color: transparent; }
+.system-message span {
+  font-size: 12px;
+  color: #999;
+  background: rgba(0,0,0,0.03);
+  padding: 2px 10px;
+  border-radius: 10px;
 }
 
-mark {
-  background: #ffeb3b;
-  color: inherit;
-  padding: 0 2px;
-  border-radius: 2px;
-}
-
-.empty-state {
+.loading-messages, .empty-messages {
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  color: #c0c4cc;
-  padding-top: 100px;
+  color: #999;
+  gap: 12px;
 }
 
-.empty-state .el-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
+.load-more {
+  text-align: center;
+  padding: 10px;
+  cursor: pointer;
 }
 
+.load-more span {
+  font-size: 12px;
+  color: #409eff;
+}
+
+/* 搜索弹窗样式 */
 .search-dialog-content {
-  display: flex;
   flex-direction: column;
   gap: 16px;
 }

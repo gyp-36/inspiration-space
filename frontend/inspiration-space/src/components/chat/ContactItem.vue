@@ -118,65 +118,80 @@ const handleAvatarError = (e) => {
 .contact-item {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  padding: 12px 14px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  border-radius: 8px;
-  margin: 2px 8px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px;
+  margin: 4px 12px;
   background-color: transparent;
+  position: relative;
 }
 
 .contact-item:hover {
-  background-color: #f5f7fa;
+  background-color: #f0f2f5;
 }
 
 .contact-item.active {
-  background-color: #eef5fe;
+  background-color: #e8f0fe;
+}
+
+.contact-item.active .name {
+  color: #1a73e8;
 }
 
 .avatar-container {
   position: relative;
-  margin-right: 12px;
+  margin-right: 14px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .avatar-container img {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
   object-fit: cover;
-  border: 1px solid #f0f0f0;
+  transition: transform 0.3s ease;
+}
+
+.contact-item:hover .avatar-container img {
+  transform: scale(1.05);
 }
 
 .online-indicator {
   position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 12px;
-  height: 12px;
+  bottom: -2px;
+  right: -2px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background-color: #909399;
-  border: 2px solid #fff;
+  background-color: #94a3b8;
+  border: 2.5px solid #fff;
 }
 
 .online-indicator.online {
-  background-color: #67c23a;
+  background-color: #22c55e;
 }
 
 .unread-badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  background-color: #f56c6c;
+  top: -6px;
+  right: -6px;
+  background-color: #ef4444;
   color: white;
   font-size: 11px;
-  padding: 0 5px;
-  height: 16px;
-  line-height: 16px;
-  border-radius: 8px;
-  min-width: 16px;
+  font-weight: 600;
+  padding: 0 6px;
+  height: 18px;
+  line-height: 18px;
+  border-radius: 10px;
+  min-width: 18px;
   text-align: center;
-  box-shadow: 0 0 0 2px #fff;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+  border: 2px solid #fff;
+  z-index: 1;
 }
 
 .info-container {
@@ -191,21 +206,24 @@ const handleAvatarError = (e) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 2px;
 }
 
 .name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #303133;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color 0.2s ease;
 }
 
 .time {
-  font-size: 12px;
-  color: #909399;
+  font-size: 11px;
+  color: #64748b;
   flex-shrink: 0;
+  font-weight: 400;
 }
 
 .footer {
@@ -215,35 +233,40 @@ const handleAvatarError = (e) => {
 }
 
 .last-message {
-  font-size: 12px;
-  color: #909399;
+  font-size: 13px;
+  color: #64748b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+  font-weight: 400;
 }
 
 .status-icons {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   margin-left: 8px;
+  align-items: center;
 }
 
 .pin-icon, .mute-icon {
-  font-size: 14px;
-  color: #c0c4cc;
+  font-size: 12px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
 }
 
 /* 响应式调整 */
 @media (max-width: 768px) {
   .contact-item {
     padding: 10px 12px;
-    margin: 1px 4px;
+    margin: 2px 8px;
   }
   
   .avatar-container img {
-    width: 40px;
-    height: 40px;
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
   }
 }
 </style>

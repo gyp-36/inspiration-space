@@ -97,7 +97,12 @@ const handleApiResponse = async (response, responseClone, apiType) => {
 
 // 通用公共API调用
 export const publicApiCall = async (endpoint, method = 'GET', body = null) => {
-  const options = { method, headers: { 'Content-Type': 'application/json' } };
+  const headers = { 'Content-Type': 'application/json' };
+  const token = localStorage.getItem('token');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const options = { method, headers };
   if (body) options.body = JSON.stringify(body);
 
   try {

@@ -63,7 +63,15 @@ public class WebSocketHandler extends AbstractWebSocketHandler {
     public void afterConnectionEstablished(@NotNull WebSocketSession session) throws Exception {
         //从前端获取token
         String token = extractTokenFromSession(session);
-        if (token == null || !JwtUtil.validateToken(token)) {
+        if (token == null) {
+            log.warn("WebSocket连接失败: 未提供token");
+            session.sendMessage(new TextMessage("token缺失"));
+            session.close(CloseStatus.POLICY_VIOLATION);
+            return;
+        }
+
+        if (!JwtUtil.validateToken(token)) {
+            log.warn("WebSocket连接失败: token无效 -> {}", token);
             session.sendMessage(new TextMessage("无效token"));
             session.close(CloseStatus.POLICY_VIOLATION);
             return;
@@ -73,11 +81,13 @@ public class WebSocketHandler extends AbstractWebSocketHandler {
         String username = JwtUtil.getUsernameFromToken(token);
 
         if (userId == null) {
+            log.warn("WebSocket连接失败: 无法从token解析userId");
             session.sendMessage(new TextMessage("userId为空"));
             session.close(CloseStatus.POLICY_VIOLATION);
             return;
         }
 
+        log.info("WebSocket连接成功: userId={}, username={}", userId, username);
         // 存储会话属性
         session.getAttributes().put("userId", userId);
         session.getAttributes().put("username", username);

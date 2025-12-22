@@ -1,3 +1,4 @@
+
 package com.is.inspirationspacecommon.util;
 
 import io.jsonwebtoken.*;
@@ -78,6 +79,12 @@ public class JwtUtil {
      */
     public static boolean validateToken(String token) {
         try {
+            if (token != null) {
+                token = token.trim();
+                if (token.startsWith("Bearer ")) {
+                    token = token.substring(7);
+                }
+            }
             Jwts.parserBuilder()
                     .setSigningKey(getSigningKey())
                     .build()
@@ -135,6 +142,14 @@ public class JwtUtil {
      * 从JWT令牌中获取所有声明信息
      */
     private static Claims getClaimsFromToken(String token) {
+        // 对token进行预处理，去除首尾空格并移除"Bearer "前缀（如果存在）
+        if (token != null) {
+            token = token.trim();
+            if (token.startsWith("Bearer ")) {
+                token = token.substring(7); // "Bearer " 长度为7
+            }
+        }
+        
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
                 .build()

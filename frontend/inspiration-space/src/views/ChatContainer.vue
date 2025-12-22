@@ -12,7 +12,7 @@
         @create-group="handleCreateGroupChat"
       />
 
-      <div class="chat-panel-wrapper">
+      <div class="chat-main">
         <div v-if="!currentSession" class="empty-chat">
           <div class="empty-chat-content">
             <svg
@@ -33,22 +33,55 @@
           </div>
         </div>
 
-        <ChatPanel
-          v-else
-          :session="currentSession"
-          :messages="currentMessages"
-          :session-members="currentSessionMembers"
-          :current-user-id="currentUserId"
-          :is-group-owner="isCurrentUserGroupOwner"
-          :loading="{ messages: loading.messages, sending: loading.sending }"
-          :has-more="hasMoreMessages"
-          :user-info="{ userId: currentUserId, userName: '当前用户' }"
-          @send-message="handleSendMessage"
-          @load-more="handleLoadMoreMessages"
-          @action="handleChatPanelAction"
-          @show-group-members="handleShowGroupMembers"
-          @switch-session="handleSelectSession"
-        />
+        <template v-else>
+          <div class="chat-content">
+            <ChatPanel
+              :session="currentSession"
+              :messages="currentMessages"
+              :session-members="currentSessionMembers"
+              :current-user-id="currentUserId"
+              :is-group-owner="isCurrentUserGroupOwner"
+              :loading="{ messages: loading.messages, sending: loading.sending }"
+              :has-more="hasMoreMessages"
+              :user-info="{ userId: currentUserId, userName: '当前用户' }"
+              @send-message="handleSendMessage"
+              @load-more="handleLoadMoreMessages"
+              @action="handleChatPanelAction"
+              @show-group-members="handleShowGroupMembers"
+              @switch-session="handleSelectSession"
+            />
+          </div>
+
+          <!-- 群聊侧边栏 -->
+          <div v-if="currentSession.sessionType === 'GROUP'" class="group-sidebar">
+            <div class="sidebar-header">
+              群成员 ({{ currentSessionMembers.length }})
+            </div>
+            <div class="member-list">
+              <el-scrollbar>
+                <div 
+                  v-for="member in currentSessionMembers" 
+                  :key="member.userId" 
+                  class="member-item"
+                >
+                  <el-avatar :size="36" :src="member.avatar || '/logo.png'" @error="() => true">
+                    <img src="/logo.png" />
+                  </el-avatar>
+                  <div class="member-info">
+                    <span class="member-name">{{ member.userName || member.nickname }}</span>
+                    <el-tag 
+                      v-if="member.role === 'OWNER'" 
+                      size="small" 
+                      type="warning" 
+                      effect="plain"
+                      class="role-tag"
+                    >群主</el-tag>
+                  </div>
+                </div>
+              </el-scrollbar>
+            </div>
+          </div>
+        </template>
       </div>
     </div>
 
@@ -305,24 +338,100 @@ const handleCreateGroupChat = async () => {
 
 <style scoped>
 .chat-view {
-  height: 100vh;
-  background-color: #f5f5f5;
+  height: calc(100vh - 64px); /* 减去导航栏高度 */
+  background-color: #f0f2f5;
+  padding: 20px;
+  box-sizing: border-box;
 }
 
 .chat-container {
   display: flex;
   height: 100%;
   background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
   overflow: hidden;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
-.chat-panel-wrapper {
+.chat-main {
+  flex: 1;
+  display: flex;
+  background-color: #fff;
+  position: relative;
+  min-width: 0;
+}
+
+.chat-content {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  border-right: 1px solid #f0f0f0;
+}
+
+.group-sidebar {
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  background-color: #fff;
+  border-left: 1px solid #eef0f2;
+}
+
+.sidebar-header {
+  padding: 16px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  border-bottom: 1px solid #eef0f2;
+  background-color: #fff;
+}
+
+.member-list {
+  flex: 1;
+  overflow: hidden;
+  padding: 8px 0;
+}
+
+.member-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 20px;
+  gap: 12px;
+  transition: all 0.2s ease;
+  cursor: default;
+}
+
+.member-item:hover {
+  background-color: #f8fafc;
+}
+
+.member-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.member-name {
+  font-size: 14px;
+  color: #334155;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-tag {
+  align-self: flex-start;
+  font-size: 10px;
+  height: 18px;
+  padding: 0 6px;
+  line-height: 16px;
+  border-radius: 4px;
+  font-weight: 500;
 }
 
 .empty-chat {
@@ -330,7 +439,7 @@ const handleCreateGroupChat = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fafafa;
+  background-color: #fff;
 }
 
 .empty-chat-content {
@@ -338,16 +447,22 @@ const handleCreateGroupChat = async () => {
   color: #999;
 }
 
-.empty-chat-content svg {
-  margin-bottom: 16px;
+.empty-chat-content p {
+  margin-top: 16px;
+  font-size: 14px;
 }
 
-.empty-chat-content p {
-  font-size: 16px;
-  margin: 0;
+@media (max-width: 1024px) {
+  .group-sidebar {
+    display: none;
+  }
 }
 
 @media (max-width: 768px) {
+  .chat-view {
+    padding: 0;
+    height: 100vh;
+  }
   .chat-container {
     border-radius: 0;
   }

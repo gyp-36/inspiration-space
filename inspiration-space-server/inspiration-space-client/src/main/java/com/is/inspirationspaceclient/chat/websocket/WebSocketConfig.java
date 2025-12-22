@@ -18,9 +18,8 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        registry.addHandler(webSocketHandler, "/ws/chat")
-                .setAllowedOriginPatterns("*")  // 允许所有跨域
-                .withSockJS();  // 可选：兼容弱网络环境
+        registry.addHandler(webSocketHandler, "/client/ws")
+                .setAllowedOriginPatterns("*");  // 允许所有跨域
     }
 }
 

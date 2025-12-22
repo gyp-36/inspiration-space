@@ -3,15 +3,14 @@ package com.is.inspirationspaceclient.chat.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.is.inspirationspaceclient.chat.mapper.ChatMessageMapper;
 import com.is.inspirationspaceclient.chat.mapper.ChatSessionMemberMapper;
-import com.is.inspirationspaceclient.chat.model.dto.SendMessageRequestDto;
 import com.is.inspirationspaceclient.chat.model.entity.ChatMessage;
 import com.is.inspirationspaceclient.chat.model.entity.ChatSessionMember;
 import com.is.inspirationspaceclient.chat.model.entity.enums.MsgStatus;
-import com.is.inspirationspaceclient.chat.model.vo.MessageVO;
 import com.is.inspirationspacecommon.enums.ErrorCode;
 import com.is.inspirationspacecommon.exception.IsArgumentException;
 import com.is.inspirationspacecommon.util.JwtUtil;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -19,6 +18,7 @@ import java.util.stream.Collectors;
 
 @Service
 @AllArgsConstructor
+@Slf4j
 public class ChatMessageServiceImpl implements ChatMessageService {
 
     private ChatMessageMapper chatMessageMapper;
@@ -51,5 +51,31 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         );
         return count.intValue();
     }
-
+    
+    @Override
+    public List<ChatMessage> getMessageHistory(Long sessionId, String token) {
+        Long currentUserId = JwtUtil.getUserIdFromToken(token);
+        if (currentUserId == null) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "用户ID为空");
+        }
+        
+        // 验证用户是否是会话成员
+        ChatSessionMember member = chatSessionMemberMapper.selectOne(
+                new QueryWrapper<ChatSessionMember>()
+                        .eq("session_id", sessionId)
+                        .eq("user_id", currentUserId)
+        );
+        
+        if (member == null) {
+            throw new IsArgumentException(ErrorCode.FORBIDDEN_ERROR.getHttpStatusCode(), "无权限访问该会话");
+        }
+        
+        // 查询会话中的消息历史，按时间倒序排列，限制返回最近100条
+        return chatMessageMapper.selectList(
+                new QueryWrapper<ChatMessage>()
+                        .eq("session_id", sessionId)
+                        .orderByDesc("sent_at")
+                        .last("LIMIT 100")
+        );
+    }
 }

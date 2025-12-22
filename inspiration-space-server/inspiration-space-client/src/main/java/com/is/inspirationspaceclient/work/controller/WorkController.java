@@ -36,7 +36,7 @@ public class WorkController {
     @Operation(summary = "创建草稿")
     @PostMapping("/createDraft")
     @RequireRole("client-user")
-    public ApiResponse<Boolean> createDraft(
+    public ApiResponse<Long> createDraft(
             @RequestHeader("Authorization") String token,
             @Valid @RequestBody WorkCreateDto workCreateDto) {
         return ApiResponse.ok(workService.createDraft(token, workCreateDto));
@@ -47,8 +47,9 @@ public class WorkController {
     @RequireRole("client-user")
     public ApiResponse<String> uploadCover(
             @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "workId", required = false) Long workId,
             @RequestHeader("Authorization") String token) {
-        return ApiResponse.ok(workService.uploadCover(file, token));
+        return ApiResponse.ok(workService.uploadCover(file, token, workId));
     }
 
 
@@ -107,6 +108,33 @@ public class WorkController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
         return ApiResponse.ok(workService.getUserWorks(userId, page, size));
+    }
+
+    @Operation(summary = "获取公共作品列表")
+    @GetMapping("/public/list")
+    public ApiResponse<Page<WorkSimpleVo>> getPublicWorks(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestHeader(value = "Authorization", required = false) String token) {
+        return ApiResponse.ok(workService.getPublicWorks(page, size, token));
+    }
+
+    @Operation(summary = "获取公共作品详情")
+    @GetMapping("/public/detail/{workId}")
+    public ApiResponse<WorkDetailVo> getPublicWorkDetail(
+            @PathVariable Long workId,
+            @RequestHeader(value = "Authorization", required = false) String token) {
+        return ApiResponse.ok(workService.getPublicWorkDetail(workId, token));
+    }
+
+    @Operation(summary = "搜索作品")
+    @GetMapping("/search")
+    public ApiResponse<Page<WorkSimpleVo>> searchWorks(
+            @RequestParam String keyword,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestHeader(value = "Authorization", required = false) String token) {
+        return ApiResponse.ok(workService.searchWorks(keyword, page, size, token));
     }
 
 //    @Operation(summary = "审核")

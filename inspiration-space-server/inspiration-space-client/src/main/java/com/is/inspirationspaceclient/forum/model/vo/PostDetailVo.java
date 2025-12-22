@@ -47,6 +47,15 @@ public class PostDetailVo implements Serializable {
     @Schema(name="view",type = "Integer",description = "浏览数")
     private Integer view;
 
-    @Schema(name = "comment",type = "List",description = "评论数")
-    private Integer comment;
+    @Schema(name = "commentCount",type = "Integer",description = "评论数")
+    private Integer commentCount;
+
+    @Schema(name="isLiked",type = "Boolean",description = "是否已点赞")
+    private Boolean isLiked;
+
+    @Schema(name="isCollected",type = "Boolean",description = "是否已收藏")
+    private Boolean isCollected;
+
+    @Schema(name="isReposted",type = "Boolean",description = "是否已转发")
+    private Boolean isReposted;
 }

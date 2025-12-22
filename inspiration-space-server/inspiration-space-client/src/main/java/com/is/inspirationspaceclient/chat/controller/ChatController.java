@@ -1,6 +1,7 @@
 package com.is.inspirationspaceclient.chat.controller;
 
 import com.is.inspirationspaceclient.chat.model.dto.CreateGroupRequestDto;
+import com.is.inspirationspaceclient.chat.model.entity.ChatMessage;
 import com.is.inspirationspaceclient.chat.model.vo.ChatSessionVO;
 import com.is.inspirationspaceclient.chat.model.vo.GroupMemberVO;
 import com.is.inspirationspaceclient.chat.service.ChatMessageService;
@@ -76,7 +77,7 @@ public class ChatController {
     @Operation(summary = "邀请用户加入群聊")
     public ApiResponse<Boolean> inviteToGroup(@PathVariable Long sessionId,
                                               @RequestBody List<Long> userIds,
-                                              @RequestHeader String token) {
+                                              @RequestHeader("Authorization") String token) {
         return ApiResponse.ok(chatsessionService.inviteToGroup(sessionId, userIds, token));
     }
 
@@ -92,7 +93,7 @@ public class ChatController {
     @DeleteMapping("/session/{sessionId}")
     @Operation(summary = "删除会话")
     public ApiResponse<Boolean> deleteChatSession(@PathVariable Long sessionId,
-                                                  @RequestHeader String token) {
+                                                  @RequestHeader("Authorization") String token) {
         return ApiResponse.ok(chatsessionService.deleteChatSession(sessionId, token));
     }
 
@@ -102,7 +103,7 @@ public class ChatController {
     @GetMapping("/group/{sessionId}/members")
     @Operation(summary = "获取群成员列表")
     public ApiResponse<List<GroupMemberVO>> getGroupMembers(@PathVariable Long sessionId,
-                                                            @RequestHeader String token) {
+                                                            @RequestHeader("Authorization") String token) {
         return ApiResponse.ok(chatsessionService.getGroupMembers(sessionId, token));
     }
 
@@ -110,7 +111,7 @@ public class ChatController {
    @Operation(summary = "发布群公告")
    public ApiResponse<Boolean> publishGroupNotice(@PathVariable Long sessionId,
                                                   @RequestBody String groupNotice,
-                                                  @RequestHeader String token) {
+                                                  @RequestHeader("Authorization") String token) {
         return ApiResponse.ok(chatsessionService.publishGroupNotice(sessionId, groupNotice, token));
     }
 
@@ -118,23 +119,31 @@ public class ChatController {
     @Operation(summary = "转让群主")
     public ApiResponse<Boolean> transferGroupOwner(@PathVariable Long sessionId,
                                                    @RequestParam Long newOwnerId,
-                                                   @RequestHeader String token) {
+                                                   @RequestHeader("Authorization") String token) {
         return ApiResponse.ok(chatsessionService.transferGroupOwner(sessionId, newOwnerId, token));
     }
 
     @PostMapping("/group/{sessionId}/dissolve")
     @Operation(summary = "解散群聊")
     public ApiResponse<Boolean> dissolveGroup(@PathVariable Long sessionId,
-                                           @RequestHeader String token) {
+                                           @RequestHeader("Authorization") String token) {
         return ApiResponse.ok(chatsessionService.dissolveGroup(sessionId, token));
+    }
+
+    // ==================== 消息管理 ====================
+    
+    @GetMapping("/messages/{sessionId}")
+    @Operation(summary = "获取会话消息历史")
+    public ApiResponse<List<ChatMessage>> getMessageHistory(@PathVariable Long sessionId,
+                                                           @RequestHeader("Authorization") String token) {
+        return ApiResponse.ok(chatMessageService.getMessageHistory(sessionId, token));
     }
 
     // ==================== 其他功能 ====================
 
     @GetMapping("/unread/count")
     @Operation(summary = "获取未读消息总数")
-    public ApiResponse<Integer> getUnreadCount(@RequestHeader String token) {
+    public ApiResponse<Integer> getUnreadCount(@RequestHeader("Authorization") String token) {
         return ApiResponse.ok(chatMessageService.getUnreadCount(token));
     }
 }
-

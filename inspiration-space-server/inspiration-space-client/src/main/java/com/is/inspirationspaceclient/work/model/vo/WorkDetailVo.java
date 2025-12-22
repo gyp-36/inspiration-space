@@ -23,9 +23,8 @@ public class WorkDetailVo implements Serializable {
     @Schema(name = "workId", type = "Long", description = "作品ID")
     private Long workId;
 
-
-    @Schema(name = "creatorId", type = "Long", description = "创建者ID")
-    private Long creatorId;
+    @Schema(name = "authorId", type = "Long", description = "作者ID")
+    private Long authorId;
 
     @Schema(name = "title", type = "String", description = "标题")
     private String title;
@@ -66,4 +65,31 @@ public class WorkDetailVo implements Serializable {
 
     @Schema(name = "totalSales", type = "Integer", description = "总销量")
     private Integer totalSales;
+
+    @Schema(name = "authorName", type = "String", description = "作者用户名")
+    private String authorName;
+
+    @Schema(name = "authorAvatar", type = "String", description = "作者头像URL")
+    private String authorAvatar;
+
+    @Schema(name = "viewCount", type = "Integer", description = "浏览量")
+    private Integer viewCount;
+
+    @Schema(name = "likeCount", type = "Integer", description = "点赞数")
+    private Integer likeCount;
+
+    @Schema(name = "collectCount", type = "Integer", description = "收藏数")
+    private Integer collectCount;
+
+    @Schema(name = "commentCount", type = "Integer", description = "评论数")
+    private Integer commentCount;
+
+    @Schema(name = "purchaseCount", type = "Integer", description = "购买数")
+    private Integer purchaseCount;
+
+    @Schema(description = "是否已点赞")
+    private Boolean isLiked;
+
+    @Schema(description = "是否已收藏")
+    private Boolean isCollected;
 }

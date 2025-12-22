@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { login as userLoginApi, register as userRegisterApi, getAvatar as getAvatarApi, updateAvatar as updateAvatarApi } from '@/services/userService'
 import { useRouter } from 'vue-router'
+import { ApiError } from '@/services/apiClient'
 
 // 定义用户 Store
 export const useUserStore = defineStore('user', () => {
@@ -143,22 +144,36 @@ export const useUserStore = defineStore('user', () => {
             const res = await userLoginApi(loginData)
             const { token, userId } = res
 
-            // 更新本地存储和全局状态
+            // 1. 立即更新本地存储和全局状态（最小化反馈延迟）
             localStorage.setItem('token', token)
             localStorage.setItem('userId', userId)
             userInfo.value.token = token
             userInfo.value.userId = userId
             isLogin.value = true
 
-            // 同步获取头像（失败不影响登录）
-            await fetchUserAvatar().catch(err => console.warn('获取头像失败:', err))
+            // 2. 立即显示成功提示
+            ElMessage.success({ 
+                message: '登录成功，欢迎回来！', 
+                duration: 1500,
+                offset: 60
+            })
 
-            ElMessage.success({ message: '登录成功！', duration: 1000 })
-            closeLoginModal() // 关闭登录框
+            // 3. 立即关闭登录框
+            closeLoginModal()
+
+            // 4. 后台异步获取头像，不阻塞登录完成（优化点）
+            fetchUserAvatar().catch(err => console.warn('获取头像失败:', err))
+
             return true
         } catch (error) {
             console.error('登录失败：', error)
-            const errorMsg = error instanceof ApiError ? error.message : '登录失败，请重试'
+            // 根据错误类型给出更精准的提示
+            let errorMsg = '登录失败，请检查网络或重试'
+            if (error && error.message) {
+                errorMsg = error.message
+            } else if (error && error.response && error.response.data && error.response.data.message) {
+                errorMsg = error.response.data.message
+            }
             ElMessage.error(errorMsg)
             return false
         }
@@ -174,7 +189,9 @@ export const useUserStore = defineStore('user', () => {
             }
 
             // 2. 调用注册接口（publicApiCall 会自动处理响应/错误，抛出 ApiError）
-            await userRegisterApi(registerData);
+            // 剔除后端不需要的 confirmPassword 和 agreement 字段
+            const { confirmPassword, agreement, ...registerDto } = registerData;
+            await userRegisterApi(registerDto);
 
             // 3. 接口调用成功（code===200），执行成功逻辑
             ElMessage.success('注册成功！请登录');

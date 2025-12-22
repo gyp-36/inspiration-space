@@ -1,9 +1,13 @@
 package com.is.inspirationspaceclient.work.service;
 
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.is.inspirationspaceclient.work.mapper.WorkStatsMapper;
 import com.is.inspirationspaceclient.work.model.entity.WorkStats;
 import com.is.inspirationspaceclient.work.model.vo.WorkStateVo;
+import com.is.inspirationspaceclient.forum.mapper.ForumUserActionsMapper;
+import com.is.inspirationspaceclient.forum.model.entity.ForumUserActions;
+import com.is.inspirationspaceclient.forum.model.entity.enums.TargetType;
 import com.is.inspirationspacecommon.redis.RedisCache;
 import com.is.inspirationspacecommon.redis.RedisKeyBuild;
 import com.is.inspirationspacecommon.redis.RedisKeyManage;
@@ -13,6 +17,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
 import java.util.*;
@@ -35,41 +40,76 @@ public class WorkStateServiceImpl implements WorkStateService {
     @Autowired
     private RedisCache redisCache;
 
+    @Autowired
+    private ForumUserActionsMapper userActionsMapper;
+
     private void incrementHashCount(Long workId, String field) {
+        changeHashCount(workId, field, 1);
+    }
+
+    private void changeHashCount(Long workId, String field, int delta) {
         RedisKeyBuild key = RedisKeyBuild.createRedisKey(RedisKeyManage.WORK_COUNT);
         //如果缓存中没有该字段，从数据库导入数据
         if (!redisCache.hasHashKey(key, workId + ":" + field)) {
             WorkStats workStats = workStatsMapper.selectById(workId);
+            if (workStats == null) {
+                workStats = new WorkStats();
+                workStats.setWorkId(workId);
+                workStats.setViewCount(0);
+                workStats.setLikeCount(0);
+                workStats.setFavoriteCount(0);
+                workStats.setCommentCount(0);
+                workStats.setPurchaseCount(0);
+                workStatsMapper.insert(workStats);
+            }
+            
+            Integer value = 0;
             switch (field) {
                 case "view":
-                    redisCache.putHash(key, workId + ":" + field, workStats.getViewCount());
+                    value = workStats.getViewCount();
                     break;
                 case "like":
-                    redisCache.putHash(key, workId + ":" + field, workStats.getLikeCount());
+                    value = workStats.getLikeCount();
                     break;
                 case "favorite":
-                    redisCache.putHash(key, workId + ":" + field, workStats.getFavoriteCount());
+                    value = workStats.getFavoriteCount();
                     break;
                 case "comment":
-                    redisCache.putHash(key, workId + ":" + field, workStats.getCommentCount());
+                    value = workStats.getCommentCount();
                     break;
                 case "purchase":
-                    redisCache.putHash(key, workId + ":" + field, workStats.getPurchaseCount());
+                    value = workStats.getPurchaseCount();
                     break;
             }
+            redisCache.putHash(key, workId + ":" + field, value != null ? value : 0);
             // 设置过期时间
             redisCache.expire(key, 1, TimeUnit.DAYS);
         }
 
         // 原子操作
-        redisCache.incrHash(key, workId + ":" + field, 1);
+        redisCache.incrHash(key, workId + ":" + field, delta);
         //更新过期时间
         redisCache.updateExpire(key, 1, TimeUnit.DAYS);
     }
 
     @Override
-    public void incrementViewCount(Long workId) {
-        incrementHashCount(workId, VIEW_FIELD);
+    public void incrementViewCount(Long workId, Long userId) {
+        if (userId == null) {
+            // 如果未登录，可以根据IP或者其他标识，这里简单处理，不计入或只计入一次
+            // 为了满足“一个用户只限一次”，通常需要标识
+            return;
+        }
+
+        RedisKeyBuild viewHistoryKey = RedisKeyBuild.createRedisKey(RedisKeyManage.WORK_VIEW_HISTORY, workId);
+        // 检查用户是否已经看过
+        Boolean hasViewed = redisCache.isSetMember(viewHistoryKey, userId);
+        if (Boolean.FALSE.equals(hasViewed)) {
+            // 没看过，添加记录并增加浏览量
+            redisCache.addSet(viewHistoryKey, userId);
+            // 设置过期时间，比如30天
+            redisCache.expire(viewHistoryKey, 30, TimeUnit.DAYS);
+            incrementHashCount(workId, VIEW_FIELD);
+        }
     }
 
     @Override
@@ -92,6 +132,137 @@ public class WorkStateServiceImpl implements WorkStateService {
         incrementHashCount(workId, PURCHASE_FIELD);
     }
 
+    @Override
+    @Transactional
+    public void toggleLike(Long workId, Long userId) {
+        toggleAction(workId, userId, TargetType.LIKE, LIKE_FIELD);
+    }
+
+    @Override
+    @Transactional
+    public void toggleCollect(Long workId, Long userId) {
+        toggleAction(workId, userId, TargetType.COLLECT, FAVORITE_FIELD);
+    }
+
+    private void toggleAction(Long workId, Long userId, TargetType type, String field) {
+        QueryWrapper<ForumUserActions> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("user_id", userId)
+                .eq("target_type", type)
+                .eq("target_id", workId);
+        
+        ForumUserActions action = userActionsMapper.selectOne(queryWrapper);
+        if (action == null) {
+            // 新增
+            action = new ForumUserActions();
+            action.setUserId(userId);
+            action.setTargetType(type);
+            action.setTargetId(workId);
+            action.setIsActive(1);
+            userActionsMapper.insert(action);
+            changeHashCount(workId, field, 1);
+        } else {
+            // 切换状态
+            int newStatus = action.getIsActive() == 1 ? 0 : 1;
+            action.setIsActive(newStatus);
+            userActionsMapper.updateById(action);
+            changeHashCount(workId, field, newStatus == 1 ? 1 : -1);
+        }
+    }
+
+
+    @Override
+    public WorkStats getWorkStats(Long workId) {
+        RedisKeyBuild key = RedisKeyBuild.createRedisKey(RedisKeyManage.WORK_COUNT);
+        WorkStats stats = new WorkStats();
+        stats.setWorkId(workId);
+        
+        stats.setViewCount(getCountFromRedisOrDb(workId, VIEW_FIELD, key));
+        stats.setLikeCount(getCountFromRedisOrDb(workId, LIKE_FIELD, key));
+        stats.setFavoriteCount(getCountFromRedisOrDb(workId, FAVORITE_FIELD, key));
+        stats.setCommentCount(getCountFromRedisOrDb(workId, COMMENT_FIELD, key));
+        stats.setPurchaseCount(getCountFromRedisOrDb(workId, PURCHASE_FIELD, key));
+        
+        return stats;
+    }
+
+    private Integer getCountFromRedisOrDb(Long workId, String field, RedisKeyBuild key) {
+        Object count = redisCache.getHash(key, workId + ":" + field, Object.class);
+        if (count != null) {
+            return ((Number) count).intValue();
+        }
+        
+        // 如果缓存没有，则加载并返回
+        WorkStats dbStats = workStatsMapper.selectById(workId);
+        if (dbStats == null) {
+            dbStats = new WorkStats();
+            dbStats.setWorkId(workId);
+            dbStats.setViewCount(0);
+            dbStats.setLikeCount(0);
+            dbStats.setFavoriteCount(0);
+            dbStats.setCommentCount(0);
+            dbStats.setPurchaseCount(0);
+            workStatsMapper.insert(dbStats);
+            
+            redisCache.putHash(key, workId + ":" + field, 0);
+            return 0;
+        }
+        
+        Integer value = 0;
+        switch (field) {
+            case VIEW_FIELD -> value = dbStats.getViewCount();
+            case LIKE_FIELD -> value = dbStats.getLikeCount();
+            case FAVORITE_FIELD -> value = dbStats.getFavoriteCount();
+            case COMMENT_FIELD -> value = dbStats.getCommentCount();
+            case PURCHASE_FIELD -> value = dbStats.getPurchaseCount();
+        }
+        
+        int finalValue = value != null ? value : 0;
+        redisCache.putHash(key, workId + ":" + field, finalValue);
+        return finalValue;
+    }
+
+    /**
+     * 每小时同步一次 Redis 统计数据到数据库
+     */
+    @Scheduled(cron = "0 0 * * * ?")
+    @Transactional
+    public void syncStatsToDb() {
+        RedisKeyBuild key = RedisKeyBuild.createRedisKey(RedisKeyManage.WORK_COUNT);
+        Map<String, Object> allStats = redisCache.getAllHash(key, Object.class);
+        if (CollectionUtils.isEmpty(allStats)) return;
+
+        Map<Long, WorkStats> updates = new HashMap<>();
+        
+        for (Map.Entry<String, Object> entry : allStats.entrySet()) {
+            String fullField = entry.getKey();
+            Integer count = ((Number) entry.getValue()).intValue();
+            
+            String[] parts = fullField.split(":");
+            if (parts.length != 2) continue;
+            
+            Long workId = Long.parseLong(parts[0]);
+            String field = parts[1];
+            
+            WorkStats stats = updates.computeIfAbsent(workId, id -> {
+                WorkStats s = new WorkStats();
+                s.setWorkId(id);
+                return s;
+            });
+            
+            switch (field) {
+                case VIEW_FIELD -> stats.setViewCount(count);
+                case LIKE_FIELD -> stats.setLikeCount(count);
+                case FAVORITE_FIELD -> stats.setFavoriteCount(count);
+                case COMMENT_FIELD -> stats.setCommentCount(count);
+                case PURCHASE_FIELD -> stats.setPurchaseCount(count);
+            }
+        }
+        
+        for (WorkStats stats : updates.values()) {
+            workStatsMapper.updateById(stats);
+        }
+        log.info("Synced {} work stats from Redis to DB", updates.size());
+    }
 
     @Override
     public List<WorkStateVo> getWorkSalesRank(int topN) {
@@ -194,13 +365,6 @@ public class WorkStateServiceImpl implements WorkStateService {
 
 
     //=========================定时任务=========================
-    //设置redis同步数据库的定时任务
-    @Scheduled(fixedRate = 5 * 60 * 1000)
-    @Async
-    public void syncWorkCounts() {
-
-    }
-
     // 定时任务预热排行榜数据
     @Scheduled(fixedRate = 60 * 60 * 1000)
     @Async

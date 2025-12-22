@@ -8,7 +8,11 @@ public enum TargetType {
     COMMENT(1, "评论"),
     LIKE(2, "点赞"),
     COLLECT(3, "收藏"),
-    REPOST(4, "转发");
+
+    REPOST(4, "转发"),
+    LIKE_COMMENT(5, "点赞评论"),
+    LIKE_WORK(6, "点赞作品"),
+    COLLECT_WORK(7, "收藏作品");
 
     @EnumValue
     private final Integer code;
