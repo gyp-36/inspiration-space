@@ -20,6 +20,9 @@ public class OrderPreviewVo implements Serializable {
     @Schema(name = "description", type = "String", description = "描述")
     private String description;
 
+    @Schema(name = "coverUrl", type = "String", description = "封面图")
+    private String coverUrl;
+
     @Schema(name = "originalPrice", type = "BigDecimal", description = "价格")
     private BigDecimal originalPrice;
 

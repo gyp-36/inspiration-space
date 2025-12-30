@@ -29,9 +29,9 @@ spring:
 
 # ===== MyBatis-Plus 配置 =====
 mybatis-plus:
+  mapper-locations: classpath*:com/is/inspirationspaceclient/**/mapper/xml/*.xml
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
-    mapper-locations: classpath*:com/is/inspirationspaceclient/**/mapper/xml/*.xml
 
 # ===== RabbitMQ 配置 =====
 rabbitmq:
@@ -65,8 +65,8 @@ alipay:
   easy:
     app-id: 9021000157618271
     protocol: https
-    gateway-Host: openapi.sandbox.dl.alipaydev.com
-    signType: RSA2
+    gateway-host: openapi-sandbox.dl.alipaydev.com
+    sign-type: RSA2
     merchant-private-key: MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDXyi8uLkWXnEcYZimDkLxnpgo3gfnYX61W0FpyHkWLG2RlTX3aUSCsbuQd8dHgNDGCagv4/K/Q1nizdZFGz0rEAB/QZdMHYKPuM7EQVhMapjMR2JpE775u/6lm/ZIK0FQ/wLTG80qv1Gv82fCGb/qLgE7aXMFi2B+WzuyS2ndFG3z9ucupLO8YQMVW7GYQG71mJfIlY4b7CcEzwUwvt9jG8GUqnbe+v9Iz7z8whscRvgUNn350LQQgdCaLmmGkhbH5mp6kLeFPdAgv1BqY/psY2UhwZ4XDo7AL4SPP+Fb7zeSica463o2i5WxjUS7bO2oAGzzi5LiQ9tPmKzvdD30dAgMBAAECggEAXrnZhjs3v3sR1osaVC/YFOPVflJnO+2cKQzjd08EljEbHEEtKwYMAsXXC7IYwIQI68fjo5RBFbrgV18Xu+7JUkr/rDrWrVll/O3iH1q5niwxJPdhmTto7E78rUJItsiHA0lz0hYAxjjIgsGlDU7gvBZCBydKmTpoe4owXbLbQpEkcZxURXgm+baw7mZDHTtrUVKfBWVzy19pw8GnbO7W7w5Gv+BMGz5358yeJl9LryWve5R9cbGZ4P632PIC+8hnHXEpFFZzOs35papTSNYVBJz616ElXuspVHsMcfs3lNK2BcZJ3yUTJe6AdLsyfE3xx/Dpxy9SnG3k1tq4tV6ePQKBgQD/vM16zCEgmTX0y2Eomaq9VXmH1i63o97ODnsZrnbJ5ziazWRV1QrdRGwA7Guj7dTSAEbHrKXWt31B1XW/OWwfFlqFPelWQWNNEAZ5ZHBRko3JB+LUQfla+xoMh3EVuz+oX2D/EA/I0cUfmpwIIPcnC5jBdVmWtUu8afFeIZqywwKBgQDYAuKQb5dZMqbhDQqkzhhwFNIbKpEsn+t3hs58De152inVwLn04lMt2QoVB9d0fHKIYtWYSGCfxtaDZp5m1geCw9qpNANtlLlaVrvVTewNOO6BMQKCQUxKg+BBqFUNuszWZZszcGcwJCkvoWyJsR/EprsdTtV/oeCPa8kb0OhSnwKBgQDThpey7SqtauxdGOe5DDlUN2G5QCgODwXYC9Q4LrzkTVLdf+twrzE4SULIFMUHp00zkbT5rUzSZ5y8GlI1I8rRf8zJjqb0iEsZT5r7R187qWuLDvHIPPWCElW+bTzVC7cgjhuNfPyBTzir5lcOxi2HZyknQugiJryJEFvrTwJEvwKBgGBYkRNZIolfZT114qx1XEMJllkVmGDuB0ltsEV2tNgnrYcwigCmvfDyIGQW9kt3gmJAqwJcLfS17FH5gGdfyUPS9YGIuIq0ziN0Eh1mvwV6wi6PXI4ab9vAjFLcsOsJyXlLInlEBlJbnp8nAdE8Vm4Q6957nhBqdE2kBrRIbocDAoGATG6gI2O7k11A4mZdHBzA231CAP8LZHSnbC/RoHV/h+nooOuUSeeI3XexNh5WNdyWHkTADw8WMNePCXVQFfGVx8DeauUT00IDYNetJkHsMa+hFl7CygC0FNn+1hy+OtDKbRjxWMfR6NhUbnjxHO7fZ+ZppmSU7pDJYQWOOLTV9PA=
     alipay-public-key: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAgjEQUIjnEQ9D+zefXV9+dzEunmUa8JekpnAe5+nnFvEUxyXNquZTGE4vc1O492/71skIphD4GcaAWko0oiXDEBrD+jzy5Iy8ZOQ4TSChjaf/xoUvNwWXWhN7qSjLkdLfHTLm1fCGGw5huViJJ8UjaXNoG/HP5K2ptKvxaPdCvRavKzQA1fGoEQ1+cpiS/R1dLtamWttC86UO+Isr8t2VwvznqzaTvz7DWcxgVmobJ6TZpQuL0k+5AO7Yoc1pJBZYJ9ejr382LVDALr6wf1Nb02lrWXlbccXDS17S6EYX09mYMvC7mYBZ9VmRVFjfhk1TA+IdmvWPKFSI2Bx4oOGDcQIDAQAB
-    notify-url: http://localhost:8080/api/v1/alipay/notify
+    notify-url: http://localhost:8080/pay-order/notify

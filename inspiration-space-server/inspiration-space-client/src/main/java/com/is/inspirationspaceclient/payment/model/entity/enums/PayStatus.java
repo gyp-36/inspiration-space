@@ -5,7 +5,7 @@ import lombok.Getter;
 
 @Getter
 public enum PayStatus {
-    UNPAID(0, "支付中"),
+    UNPAY(0, "支付中"),
     SUCCESS(1, "支付成功"),
     FAIL(2, "支付失败"),
     CANCEL(3, "支付取消");
@@ -25,7 +25,7 @@ public enum PayStatus {
                 return value;
             }
         }
-        return UNPAID;
+        return UNPAY;
     }
 
 }

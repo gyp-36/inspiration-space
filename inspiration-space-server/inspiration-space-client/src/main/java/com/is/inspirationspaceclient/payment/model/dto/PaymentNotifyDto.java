@@ -19,6 +19,7 @@ public class PaymentNotifyDto implements Serializable {
     @Schema(name = "transactionNo", type = "String", description = "第三方交易号" )
     private String transactionNo;
 
+
     @Schema(name = "payTime", type = "LocalDateTime", description = "支付时间" )
     private LocalDateTime payTime;
 }

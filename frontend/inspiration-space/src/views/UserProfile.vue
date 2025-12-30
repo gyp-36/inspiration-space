@@ -32,6 +32,10 @@
             <div class="user-info-side">
               <div class="name-follow-row">
                 <h2 class="username">{{ user.username || '匿名用户' }}</h2>
+                <div class="user-id-badge" @click="copyUserId" title="点击复制 ID">
+                  <span class="id-text">ID: {{ currentUserId }}</span>
+                  <el-icon class="copy-icon"><CopyDocument /></el-icon>
+                </div>
                 
                 <!-- 关注/取消关注按钮 -->
                 <el-button 
@@ -83,8 +87,26 @@
           <el-tabs v-model="activeTab" class="profile-tabs">
             <el-tab-pane label="他的灵感" name="posts">
               <div class="tab-content">
-                <!-- 这里可以复用帖子列表组件，暂时放空状态 -->
-                <el-empty :description="`${user.username} 还没有发布过灵感`" />
+                <div v-if="userWorks.length > 0" class="works-grid">
+                  <div v-for="work in userWorks" :key="work.workId" class="grid-item">
+                    <WorkItem :work="work" />
+                  </div>
+                </div>
+                
+                <div v-if="userWorks.length > 0" class="pagination-wrapper">
+                  <el-pagination
+                    v-model:current-page="worksPage"
+                    :page-size="worksPageSize"
+                    layout="prev, pager, next"
+                    :total="worksTotal"
+                    @current-change="fetchUserWorks"
+                  />
+                </div>
+
+                <el-empty v-else-if="!worksLoading" :description="`${user.username} 还没有发布过灵感`" />
+                <div v-else class="loading-placeholder">
+                   <el-skeleton :rows="5" animated />
+                </div>
               </div>
             </el-tab-pane>
           </el-tabs>
@@ -98,9 +120,11 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { getUser, getAvatar, followUser, unfollowUser, checkFollowStatus } from '@/services/userService';
+import { workService } from '@/services/workService';
 import { useUserStore } from '@/stores/userStore';
+import WorkItem from '@/components/home/WorkItem.vue';
 import { ElMessage } from 'element-plus';
-import { Plus } from '@element-plus/icons-vue';
+import { Plus, CopyDocument } from '@element-plus/icons-vue';
 
 const route = useRoute();
 const userStore = useUserStore();
@@ -112,12 +136,35 @@ const user = ref({});
 const isFollowing = ref(false);
 const activeTab = ref('posts');
 
+// 作品相关
+const userWorks = ref([]);
+const worksPage = ref(1);
+const worksTotal = ref(0);
+const worksLoading = ref(false);
+const worksPageSize = ref(12);
+
 // 响应式获取当前路由的 userId
 const currentUserId = computed(() => route.params.userId);
 
 const isOwnProfile = computed(() => {
   return String(userStore.userInfo?.userId) === String(currentUserId.value);
 });
+
+// 获取用户作品
+const fetchUserWorks = async (page = 1) => {
+  if (!currentUserId.value) return;
+  worksLoading.value = true;
+  try {
+    const res = await workService.getUserWorks(currentUserId.value, page, worksPageSize.value);
+    userWorks.value = res.records || [];
+    worksTotal.value = res.total || 0;
+    worksPage.value = page;
+  } catch (err) {
+    console.error('获取作品失败:', err);
+  } finally {
+    worksLoading.value = false;
+  }
+};
 
 // 处理头像：如果后端返回的是文件名，则调用 API 获取完整 URL
 const fetchAvatarIfNeeded = async () => {
@@ -142,6 +189,7 @@ const fetchUserData = async () => {
     const userData = await getUser(currentUserId.value);
     user.value = userData;
     await fetchAvatarIfNeeded();
+    await fetchUserWorks(1);
 
     // 检查关注状态 (如果已登录且不是看自己)
     if (userStore.isLogin && !isOwnProfile.value) {
@@ -190,6 +238,16 @@ const handleFollowToggle = async () => {
   } finally {
     followLoading.value = false;
   }
+};
+
+const copyUserId = () => {
+  if (!currentUserId.value) return;
+  navigator.clipboard.writeText(String(currentUserId.value)).then(() => {
+    ElMessage.success('ID 已复制到剪贴板');
+  }).catch(err => {
+    console.error('复制失败:', err);
+    ElMessage.error('复制失败，请手动复制');
+  });
 };
 
 onMounted(fetchUserData);
@@ -285,6 +343,30 @@ onMounted(fetchUserData);
   margin: 0;
 }
 
+.user-id-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #f1f5f9;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #64748b;
+  font-size: 13px;
+  border: 1px solid #e2e8f0;
+}
+
+.user-id-badge:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+  transform: translateY(-1px);
+}
+
+.copy-icon {
+  font-size: 14px;
+}
+
 .follow-btn {
   border-radius: 20px;
   padding: 8px 24px;
@@ -339,6 +421,23 @@ onMounted(fetchUserData);
   margin: 0 auto;
   padding: 100px 0;
   text-align: center;
+}
+
+.works-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 25px;
+  margin-top: 20px;
+}
+
+.pagination-wrapper {
+  margin-top: 40px;
+  display: flex;
+  justify-content: center;
+}
+
+.loading-placeholder {
+  padding: 40px 0;
 }
 </style>
 

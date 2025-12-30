@@ -155,17 +155,58 @@ public class WebSocketHandler extends AbstractWebSocketHandler {
      * 标记消息为已读状态
      */
     private void markMessageAsRead(Long messageId, Long userId) {
-        ChatMessage message = chatMessageMapper.selectOne(
-                new QueryWrapper<ChatMessage>()
-                        .select("session_status")
-                        .eq("message_id", messageId)
-        );
+        ChatMessage message = chatMessageMapper.selectById(messageId);
         if (message == null) return;
 
         // 仅允许接收方标记为已读
         if (!message.getSenderId().equals(userId)) {
             message.setStatus(MsgStatus.READ);
             chatMessageMapper.updateById(message);
+            
+            // 通知发送者，消息已读
+            Map<String, Object> wsMessage = Map.of(
+                "type", "READ_RECEIPT",
+                "sessionId", message.getSessionId(),
+                "messageId", messageId,
+                "readerId", userId
+            );
+            connectionManager.sendIfOnline(message.getSenderId(), session -> {
+                try {
+                    session.sendMessage(new TextMessage(JSON.toJSONString(wsMessage)));
+                } catch (IOException e) {
+                    log.error("发送已读回执失败：{}", e.getMessage());
+                }
+            });
+        }
+    }
+
+    /**
+     * 通知会话成员消息被撤回
+     */
+    private void broadcastRecallMessage(ChatSession chatSession, ChatMessage targetMessage) {
+        List<ChatSessionMember> members = chatSessionMemberMapper.selectList(
+                new QueryWrapper<ChatSessionMember>()
+                        .select("user_id")
+                        .eq("session_id", chatSession.getSessionId())
+                        .eq("session_status", SessionStatus.NORMAL)
+                        .ne("user_id", targetMessage.getSenderId())
+        );
+
+        Map<String, Object> wsMessage = Map.of(
+            "type", "MESSAGE_RECALL",
+            "sessionId", chatSession.getSessionId(),
+            "messageId", targetMessage.getMessageId()
+        );
+        String messageJson = JSON.toJSONString(wsMessage);
+
+        for (ChatSessionMember member : members) {
+            connectionManager.sendIfOnline(member.getUserId(), session -> {
+                try {
+                    session.sendMessage(new TextMessage(messageJson));
+                } catch (IOException e) {
+                    log.error("发送撤回消息通知失败：{}", e.getMessage());
+                }
+            });
         }
     }
 
@@ -205,11 +246,7 @@ public class WebSocketHandler extends AbstractWebSocketHandler {
         chatMessageMapper.updateById(targetMessage);
 
         // 5. 通知会话中的其他成员该消息已被撤回
-        if (chatSession.getSessionType() == SessionType.GROUP) {
-            handleGroupMessage(chatSession, targetMessage);  // 发送更新后的消息状态
-        } else if (chatSession.getSessionType() == SessionType.PRIVATE) {
-            handlePrivateMessage(chatSession, targetMessage);
-        }
+        broadcastRecallMessage(chatSession, targetMessage);
     }
 
     /**
@@ -298,7 +335,13 @@ public class WebSocketHandler extends AbstractWebSocketHandler {
             //直接推送
             connectionManager.sendIfOnline(receiverId, session -> {
                 try {
-                    session.sendMessage(new TextMessage(JSON.toJSONString(chatMessage)));
+                    // 包装消息
+                    Map<String, Object> wsMessage = Map.of(
+                        "type", "CHAT_MESSAGE",
+                        "sessionId", chatSession.getSessionId(),
+                        "data", chatMessage
+                    );
+                    session.sendMessage(new TextMessage(JSON.toJSONString(wsMessage)));
                     chatMessage.setStatus(MsgStatus.DELIVERED);//更新为已送达
                     chatMessageMapper.updateById(chatMessage);
                 } catch (IOException e) {
@@ -333,8 +376,14 @@ public class WebSocketHandler extends AbstractWebSocketHandler {
                 // 直接推送
                 connectionManager.sendIfOnline(memberId, session -> {
                     try {
+                        // 包装消息
+                        Map<String, Object> wsMessage = Map.of(
+                            "type", "CHAT_MESSAGE",
+                            "sessionId", chatSession.getSessionId(),
+                            "data", chatMessage
+                        );
                         chatMessage.setStatus(MsgStatus.DELIVERED);//更新为已送达
-                        session.sendMessage(new TextMessage(JSON.toJSONString(chatMessage)));
+                        session.sendMessage(new TextMessage(JSON.toJSONString(wsMessage)));
                     } catch (IOException e) {
                         log.error("发送群聊消息失败：{}", e.getMessage());
                     }

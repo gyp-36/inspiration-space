@@ -20,7 +20,7 @@
     <properties>
         <java.version>17</java.version>
         <spring-boot.version>3.5.6</spring-boot.version>
-        <lombok.version>1.18.26</lombok.version>
+        <lombok.version>1.18.34</lombok.version>
         <hutool.version>5.8.26</hutool.version>
         <zxing.version>3.5.1</zxing.version>
         <snakeyaml.version>2.2</snakeyaml.version>
@@ -218,5 +218,29 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                    <encoding>UTF-8</encoding>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>${mapstruct.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
     </build>
 </project>

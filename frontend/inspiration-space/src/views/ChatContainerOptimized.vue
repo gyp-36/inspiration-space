@@ -7,10 +7,12 @@
         :sessions="sortedSessions" 
         :selected-session-id="currentSession?.sessionId"
         :connection-status="connectionStatus"
-        :loading="loading.sessions"
+        :loading="storeLoading.sessions"
         @select-session="handleSelectSession"
         @create-private-chat="handleCreatePrivateChat"
         @create-group-chat="handleCreateGroupChat"
+        @pin-session="handlePinSession"
+        @delete-session="handleDeleteSession"
       />
 
       <!-- 右侧聊天面板（条件渲染） -->
@@ -26,28 +28,154 @@
         </div>
 
         <!-- 选中会话后的聊天面板 -->
-        <ChatPanelOptimized
-          v-else
-          :session="currentSession" 
-          :messages="currentMessages"
-          :session-members="currentSessionMembers"
-          :current-user-id="currentUserId"
-          :is-group-owner="isCurrentUserGroupOwner"
-          :loading="loading.messages || loading.sending"
-          :loading-members="loading.members"
-          :user-info="{ userId: currentUserId, userName: '当前用户' }"
-          @send-message="handleSendMessage"
-          @load-more="handleLoadMoreMessages"
-          @recall-message="handleRecallMessage"
-          @mark-as-read="handleMarkAsRead"
-          @leave-group="handleLeaveGroup"
-          @dissolve-group="handleDissolveGroup"
-          @show-group-members="handleShowGroupMembers"
-          @action="handleChatPanelAction"
-          @switch-session="handleSelectSession"
-        />
+        <div v-else class="chat-main-area">
+          <ChatPanelOptimized
+            class="chat-panel-main"
+            :session="currentSession" 
+            :messages="currentMessages"
+            :session-members="currentSessionMembers"
+            :current-user-id="currentUserId"
+            :is-group-owner="isCurrentUserGroupOwner"
+            :is-group-admin="isCurrentUserGroupAdmin"
+            :loading="storeLoading.messages || storeLoading.sending"
+            :loading-members="storeLoading.members"
+            :user-info="userInfo"
+            :show-sidebar="showGroupSidebar"
+            @send-message="handleSendMessage"
+            @load-more="handleLoadMoreMessages"
+            @recall-message="handleRecallMessage"
+            @mark-as-read="handleMarkAsRead"
+            @leave-group="handleLeaveGroup"
+            @dissolve-group="handleDissolveGroup"
+            @show-group-members="handleShowGroupMembers"
+            @toggle-sidebar="showGroupSidebar = !showGroupSidebar"
+            @action="handleChatPanelAction"
+            @switch-session="handleSelectSession"
+            @invite-member="showInviteDialog = true"
+            @edit-group="handleOpenEditGroup"
+            @edit-avatar="handleOpenEditAvatar"
+            @publish-notice="showPublishNoticeDialog = true"
+            @view-notice="showViewNoticeDialog = true"
+          />
+
+          <!-- 右侧群成员侧边栏（抽屉式） -->
+          <el-drawer
+            v-model="showGroupSidebar"
+            :title="`群成员 (${currentSessionMembers.length})`"
+            direction="rtl"
+            size="300px"
+            :with-header="true"
+            v-if="currentSession?.sessionType === 'GROUP'"
+            class="member-drawer"
+            :modal="true"
+            :append-to-body="false"
+            :lock-scroll="false"
+            :close-on-click-modal="true"
+          >
+            <GroupMemberSidebar
+              :members="currentSessionMembers"
+              :current-user-id="currentUserId"
+              :is-current-user-owner="isCurrentUserGroupOwner"
+              :is-current-user-admin="isCurrentUserGroupAdmin"
+              @kick-member="handleKickMember"
+              @invite-member="showInviteDialog = true"
+            />
+          </el-drawer>
+        </div>
       </div>
     </div>
+
+    <!-- 邀请成员对话框 -->
+    <el-dialog v-model="showInviteDialog" title="邀请成员" width="400px">
+      <el-form label-position="top">
+        <el-form-item label="用户ID (支持输入多个，用逗号或换行分隔)">
+          <el-input
+            v-model="inviteUserIdsInput"
+            type="textarea"
+            :rows="4"
+            placeholder="例如: 1001, 1002, 1003"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showInviteDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleInviteConfirm" :loading="actionLoading.inviting">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 修改群信息对话框 -->
+    <el-dialog v-model="showEditGroupDialog" title="修改群信息" width="500px">
+      <el-form :model="editGroupForm" label-width="80px">
+        <el-form-item label="群名称">
+          <el-input v-model="editGroupForm.groupName" />
+        </el-form-item>
+        <el-form-item label="群描述">
+          <el-input v-model="editGroupForm.description" type="textarea" :rows="3" />
+        </el-form-item>
+        <el-form-item label="入群审核">
+          <el-radio-group v-model="editGroupForm.requiredApproval">
+            <el-radio :label="0">需要</el-radio>
+            <el-radio :label="1">不需要</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showEditGroupDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleEditGroupConfirm" :loading="actionLoading.updating">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 修改群头像对话框 -->
+    <el-dialog v-model="showEditAvatarDialog" title="修改群头像" width="400px">
+      <div class="avatar-edit-container">
+        <el-upload
+          class="avatar-uploader"
+          action="#"
+          :show-file-list="false"
+          :auto-upload="false"
+          :on-change="handleAvatarChange"
+        >
+          <img v-if="editGroupForm.avatarUrl" :src="editGroupForm.avatarUrl" class="avatar-preview" />
+          <el-icon v-else class="avatar-uploader-icon"><Plus /></el-icon>
+        </el-upload>
+        <div class="avatar-tip">点击预览图更换头像</div>
+      </div>
+      <template #footer>
+        <el-button @click="showEditAvatarDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleEditAvatarConfirm" :loading="actionLoading.updating">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 发布群公告对话框 -->
+    <el-dialog v-model="showPublishNoticeDialog" title="发布群公告" width="400px">
+      <el-form label-position="top">
+        <el-form-item label="公告内容">
+          <el-input
+            v-model="noticeInput"
+            type="textarea"
+            :rows="6"
+            placeholder="请输入群公告内容..."
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showPublishNoticeDialog = false">取消</el-button>
+        <el-button type="primary" @click="handlePublishNoticeConfirm">发布</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 查看群公告对话框 -->
+    <el-dialog v-model="showViewNoticeDialog" title="群公告" width="400px">
+      <div class="notice-view-content">
+        <div v-if="currentGroupNotice" class="notice-text">
+          {{ currentGroupNotice }}
+        </div>
+        <el-empty v-else description="暂无群公告" :image-size="80" />
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="showViewNoticeDialog = false">知道了</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 群成员对话框 -->
     <el-dialog
@@ -97,30 +225,226 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useChatStore } from '@/stores/chatStoreOptimized'
+import { useUserStore } from '@/stores/userStore'
 import ContactPanelOptimized from '../components/chat/ContactPanelOptimized.vue'
 import ChatPanelOptimized from '../components/chat/ChatPanelOptimized.vue'
+import GroupMemberSidebar from '../components/chat/GroupMemberSidebar.vue'
 import GroupMembersDialog from '../components/chat/GroupMembersDialog.vue'
 import CreatePrivateChatDialog from '../components/chat/CreatePrivateChatDialog.vue'
 import CreateGroupChatDialog from '../components/chat/CreateGroupChatDialog.vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 // 使用聊天Store
 const chatStore = useChatStore()
-const { 
-  sortedSessions, 
-  currentSession, 
-  currentMessages, 
+const userStore = useUserStore()
+const {
+  sortedSessions,
+  currentSession,
+  currentMessages,
   currentSessionMembers,
-  connectionStatus, 
-  loading,
+  connectionStatus,
+  loading: storeLoading,
   currentUserId,
-  isCurrentUserGroupOwner
+  isCurrentUserGroupOwner,
+  isCurrentUserGroupAdmin,
+  messagePagination
 } = storeToRefs(chatStore)
+
+const { userInfo } = storeToRefs(userStore)
 
 // 对话框状态
 const showGroupMembersDialog = ref(false)
 const showCreatePrivateDialog = ref(false)
 const showCreateGroupDialog = ref(false)
+const showInviteDialog = ref(false)
+const showEditGroupDialog = ref(false)
+const showEditAvatarDialog = ref(false)
+const showPublishNoticeDialog = ref(false)
+const showViewNoticeDialog = ref(false)
+
+const inviteUserIdsInput = ref('')
+const noticeInput = ref('')
+const editGroupForm = ref({
+  groupName: '',
+  description: '',
+  requiredApproval: 0,
+  avatarUrl: ''
+})
+
+const actionLoading = ref({
+  inviting: false,
+  updating: false,
+  uploading: false
+})
+
+const currentGroupNotice = computed(() => {
+  if (!currentSession.value) return ''
+  // 查找最新的群公告消息
+  const noticeMsg = currentMessages.value.findLast(m => m.msgType === 'GROUP_NOTICE')
+  return noticeMsg ? noticeMsg.content : ''
+})
+
+// 处理打开修改群信息对话框
+const handleOpenEditGroup = async () => {
+  if (!currentSession.value) return
+  
+  try {
+    const groupInfo = await chatStore.getGroupInfo(currentSession.value.sessionId)
+    if (groupInfo) {
+      editGroupForm.value = {
+        groupName: groupInfo.groupName || '',
+        description: groupInfo.description || '',
+        // 将后端枚举值转换为前端对应的数字
+        requiredApproval: groupInfo.requiredApproval === 'NEED_APPROVAL' ? 0 : 1,
+        avatarUrl: groupInfo.sessionAvatar || ''
+      }
+      showEditGroupDialog.value = true
+    }
+  } catch (error) {
+    console.error('获取群详情失败:', error)
+    ElMessage.error('获取群详情失败')
+  }
+}
+
+// 处理打开修改群头像对话框
+const handleOpenEditAvatar = async () => {
+  if (!currentSession.value) return
+  
+  try {
+    const groupInfo = await chatStore.getGroupInfo(currentSession.value.sessionId)
+    if (groupInfo) {
+      editGroupForm.value = {
+        ...editGroupForm.value,
+        avatarUrl: groupInfo.sessionAvatar || ''
+      }
+      showEditAvatarDialog.value = true
+    }
+  } catch (error) {
+    console.error('获取群详情失败:', error)
+    ElMessage.error('获取群详情失败')
+  }
+}
+
+// 处理修改头像确认
+const handleEditAvatarConfirm = async () => {
+  if (!currentSession.value) return
+  if (!selectedAvatarFile.value) {
+    ElMessage.warning('请先选择新头像')
+    return
+  }
+
+  actionLoading.value.updating = true
+  try {
+    const avatarUrl = await chatStore.uploadGroupAvatar(currentSession.value.sessionId, selectedAvatarFile.value)
+    if (avatarUrl) {
+      // 同时更新群组信息中的头像
+      await chatStore.updateGroupInfo(currentSession.value.sessionId, {
+        ...editGroupForm.value,
+        avatarUrl
+      })
+      ElMessage.success('群头像修改成功')
+      showEditAvatarDialog.value = false
+      selectedAvatarFile.value = null
+    }
+  } catch (error) {
+    console.error('修改群头像失败:', error)
+    ElMessage.error('修改群头像失败')
+  } finally {
+    actionLoading.value.updating = false
+  }
+}
+
+const selectedAvatarFile = ref(null)
+const handleAvatarChange = (file) => {
+  const isJPGorPNG = file.raw.type === 'image/jpeg' || file.raw.type === 'image/png'
+  const isLt10M = file.raw.size / 1024 / 1024 < 10
+
+  if (!isJPGorPNG) {
+    ElMessage.error('上传头像图片只能是 JPG/PNG 格式!')
+    return false
+  }
+  if (!isLt10M) {
+    ElMessage.error('上传头像图片大小不能超过 10MB!')
+    return false
+  }
+
+  selectedAvatarFile.value = file.raw
+  editGroupForm.value.avatarUrl = URL.createObjectURL(file.raw)
+}
+
+// 处理邀请
+const handleInviteConfirm = async () => {
+  if (!inviteUserIdsInput.value.trim()) {
+    ElMessage.warning('请输入用户ID')
+    return
+  }
+  
+  const userIds = inviteUserIdsInput.value
+    .split(/[,\n]/)
+    .map(id => id.trim())
+    .filter(id => id)
+    .map(id => Number(id))
+  
+  if (userIds.some(id => isNaN(id))) {
+    ElMessage.warning('请输入有效的数字ID')
+    return
+  }
+
+  actionLoading.value.inviting = true
+  try {
+    const result = await chatStore.inviteToGroup(currentSession.value.sessionId, userIds)
+    if (result) {
+      showInviteDialog.value = false
+      inviteUserIdsInput.value = ''
+    }
+  } finally {
+    actionLoading.value.inviting = false
+  }
+}
+
+// 处理修改群信息
+const handleEditGroupConfirm = async () => {
+  if (!editGroupForm.value.groupName.trim()) {
+    ElMessage.warning('群名称不能为空')
+    return
+  }
+
+  actionLoading.value.updating = true
+  try {
+    const result = await chatStore.updateGroupInfo(currentSession.value.sessionId, {
+      groupName: editGroupForm.value.groupName.trim(),
+      description: editGroupForm.value.description.trim(),
+      requiredApproval: editGroupForm.value.requiredApproval
+    })
+    if (result) {
+      showEditGroupDialog.value = false
+      // 成功后手动同步一次，确保最新
+      if (currentSession.value) {
+        currentSession.value.sessionName = editGroupForm.value.groupName.trim()
+        currentSession.value.description = editGroupForm.value.description.trim()
+        currentSession.value.requireApproval = editGroupForm.value.requiredApproval
+      }
+    }
+  } finally {
+    actionLoading.value.updating = false
+  }
+}
+
+// 处理发布公告
+const handlePublishNoticeConfirm = async () => {
+  if (!noticeInput.value.trim()) {
+    ElMessage.warning('公告内容不能为空')
+    return
+  }
+
+  const result = await chatStore.publishGroupNotice(currentSession.value.sessionId, noticeInput.value.trim())
+  if (result) {
+    showPublishNoticeDialog.value = false
+    noticeInput.value = ''
+    ElMessage.success('公告发布成功')
+  }
+}
+const showGroupSidebar = ref(false)
 
 // 组件挂载时初始化
 onMounted(async () => {
@@ -189,6 +513,24 @@ const handleSelectSession = async (session) => {
     console.error('选择会话失败:', error)
     ElMessage.error('选择会话失败')
   }
+}
+
+const handlePinSession = (session) => {
+  chatStore.pinSession(session.sessionId)
+}
+
+const handleDeleteSession = (session) => {
+  ElMessageBox.confirm(
+    '确定要删除该会话吗？删除后聊天记录将无法恢复。',
+    '提示',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    }
+  ).then(() => {
+    chatStore.deleteSession(session.sessionId)
+  }).catch(() => {})
 }
 
 // 处理发送消息
@@ -264,22 +606,38 @@ const handleDissolveGroup = async () => {
   }
 }
 
-// 处理聊天面板的各种操作
-const handleChatPanelAction = async (action) => {
+// 处理踢出群成员
+const handleKickMember = async (userId) => {
   try {
-    switch (action.type) {
-      case 'publish-notice':
-        if (currentSession.value) {
-          await chatStore.publishGroupNotice(currentSession.value.sessionId, action.content)
-        }
-        break
+    if (!currentSession.value) return
+    
+    await chatStore.kickFromGroup(currentSession.value.sessionId, [userId])
+    ElMessage.success('移出成功')
+    
+    // 重新加载成员列表
+    await chatStore.loadSessionMembers(currentSession.value.sessionId)
+  } catch (error) {
+    console.error('踢出成员失败:', error)
+    ElMessage.error(error.message || '踢出成员失败')
+  }
+}
+
+// 处理各种聊天面板动作
+const handleChatPanelAction = async (command) => {
+  try {
+    const type = typeof command === 'string' ? command : command.type
+    
+    switch (type) {
       case 'clear':
         // 清空聊天记录
         ElMessage.success('聊天记录已清空')
         break
       case 'delete':
         // 删除会话
-        ElMessage.success('会话已删除')
+        if (currentSession.value) {
+          await chatStore.deleteSession(currentSession.value.sessionId)
+          ElMessage.success('会话已删除')
+        }
         break
       case 'dissolve':
         await handleDissolveGroup()
@@ -288,7 +646,7 @@ const handleChatPanelAction = async (action) => {
         await handleLeaveGroup()
         break
       default:
-        console.log('未知的操作类型:', action.type)
+        console.log('未知的操作类型:', type)
     }
   } catch (error) {
     console.error('处理聊天面板操作失败:', error)
@@ -299,18 +657,6 @@ const handleChatPanelAction = async (action) => {
 // 处理显示群成员
 const handleShowGroupMembers = () => {
   showGroupMembersDialog.value = true
-}
-
-// 处理踢出成员
-const handleKickMember = async (userId) => {
-  if (!currentSession.value) return
-  
-  try {
-    await chatStore.kickGroupMember(currentSession.value.sessionId, userId)
-  } catch (error) {
-    console.error('踢出成员失败:', error)
-    ElMessage.error('踢出成员失败')
-  }
 }
 
 // 处理转让群主
@@ -366,17 +712,47 @@ const handleCreateGroupChatConfirm = async (groupData) => {
 
 <style scoped>
 .chat-view {
-  height: 100vh;
-  background-color: #f5f5f5;
+  height: calc(100vh - 64px); /* 减去导航栏高度 */
+  background-color: #f5f7fa;
+  padding: 20px;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .chat-container {
   display: flex;
+  width: 100%;
+  max-width: 1600px;
   height: 100%;
+  min-height: 600px;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+  position: relative; /* 关键：使 drawer 相对于此容器定位 */
+}
+
+/* 覆盖 Element Plus 抽屉样式，使其在容器内展示 */
+:deep(.member-drawer) {
+  position: absolute !important;
+}
+
+:deep(.el-overlay) {
+  position: absolute !important;
+}
+
+.chat-main-area {
+  flex: 1;
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.chat-panel-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .chat-panel-wrapper {
@@ -406,6 +782,71 @@ const handleCreateGroupChatConfirm = async (groupData) => {
 .empty-chat-content p {
   font-size: 16px;
   margin: 0;
+}
+
+.avatar-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar-edit-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 0;
+}
+
+.avatar-uploader {
+  border: 1px dashed #d9d9d9;
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: border-color 0.3s;
+}
+
+.avatar-uploader:hover {
+  border-color: #409eff;
+}
+
+.avatar-preview {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+}
+
+.avatar-uploader-icon {
+  font-size: 28px;
+  color: #8c939d;
+}
+
+.avatar-tip {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.notice-view-content {
+  padding: 10px 0;
+}
+
+.notice-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #606266;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.member-drawer :deep(.el-drawer__body) {
+  padding: 0;
 }
 
 /* 响应式设计 */

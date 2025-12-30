@@ -1,8 +1,10 @@
 package com.is.inspirationspaceclient.chat.controller;
 
 import com.is.inspirationspaceclient.chat.model.dto.CreateGroupRequestDto;
+import com.is.inspirationspaceclient.chat.model.dto.SendMessageRequestDto;
 import com.is.inspirationspaceclient.chat.model.entity.ChatMessage;
 import com.is.inspirationspaceclient.chat.model.vo.ChatSessionVO;
+import com.is.inspirationspaceclient.chat.model.vo.GroupInfoVO;
 import com.is.inspirationspaceclient.chat.model.vo.GroupMemberVO;
 import com.is.inspirationspaceclient.chat.service.ChatMessageService;
 import com.is.inspirationspaceclient.chat.service.ChatSessionService;
@@ -97,6 +99,13 @@ public class ChatController {
         return ApiResponse.ok(chatsessionService.deleteChatSession(sessionId, token));
     }
 
+    @PutMapping("/session/{sessionId}/read")
+    @Operation(summary = "标记会话为已读")
+    public ApiResponse<Boolean> markSessionAsRead(@PathVariable Long sessionId,
+                                                 @RequestHeader("Authorization") String token) {
+        return ApiResponse.ok(chatsessionService.markSessionAsRead(sessionId, token));
+    }
+
 
     // ==================== 群聊管理 ====================
 
@@ -105,6 +114,13 @@ public class ChatController {
     public ApiResponse<List<GroupMemberVO>> getGroupMembers(@PathVariable Long sessionId,
                                                             @RequestHeader("Authorization") String token) {
         return ApiResponse.ok(chatsessionService.getGroupMembers(sessionId, token));
+    }
+
+    @GetMapping("/group/{sessionId}")
+    @Operation(summary = "获取群详情")
+    public ApiResponse<GroupInfoVO> getGroupInfo(@PathVariable Long sessionId,
+                                                 @RequestHeader("Authorization") String token) {
+        return ApiResponse.ok(chatsessionService.getGroupInfo(sessionId, token));
     }
 
    @PostMapping("/group/{sessionId}/publish")
@@ -130,6 +146,14 @@ public class ChatController {
         return ApiResponse.ok(chatsessionService.dissolveGroup(sessionId, token));
     }
 
+    @PostMapping("/group/{sessionId}/update")
+    @Operation(summary = "修改群信息")
+    public ApiResponse<Boolean> updateGroupInfo(@PathVariable Long sessionId,
+                                                @RequestBody CreateGroupRequestDto updateGroupRequestDto,
+                                                @RequestHeader("Authorization") String token) {
+        return ApiResponse.ok(chatsessionService.updateGroupInfo(sessionId, updateGroupRequestDto, token));
+    }
+
     // ==================== 消息管理 ====================
     
     @GetMapping("/messages/{sessionId}")
@@ -137,6 +161,20 @@ public class ChatController {
     public ApiResponse<List<ChatMessage>> getMessageHistory(@PathVariable Long sessionId,
                                                            @RequestHeader("Authorization") String token) {
         return ApiResponse.ok(chatMessageService.getMessageHistory(sessionId, token));
+    }
+
+    @PostMapping("/message")
+    @Operation(summary = "发送消息")
+    public ApiResponse<Long> sendMessage(@RequestBody SendMessageRequestDto sendMessageRequestDto,
+                                         @RequestHeader("Authorization") String token) {
+        return ApiResponse.ok(chatMessageService.sendMessage(sendMessageRequestDto, token));
+    }
+
+    @PutMapping("/message/{messageId}/read")
+    @Operation(summary = "标记消息为已读")
+    public ApiResponse<Boolean> markMessageAsRead(@PathVariable Long messageId,
+                                                 @RequestHeader("Authorization") String token) {
+        return ApiResponse.ok(chatMessageService.markMessageAsRead(messageId, token));
     }
 
     // ==================== 其他功能 ====================

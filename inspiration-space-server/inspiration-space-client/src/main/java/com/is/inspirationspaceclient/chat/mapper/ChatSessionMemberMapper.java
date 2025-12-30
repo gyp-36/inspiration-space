@@ -13,8 +13,15 @@ import java.util.List;
 
 @Mapper
 public interface ChatSessionMemberMapper extends BaseMapper<ChatSessionMember> {
-    @Insert("")
+    @Insert("<script>" +
+            "INSERT INTO chat_session_members (session_id, user_id, joined_at, role) " +
+            "VALUES " +
+            "<foreach collection='userIds' item='userId' separator=','>" +
+            "(#{sessionId}, #{userId}, NOW(), 1)" +
+            "</foreach>" +
+            "</script>")
     void batchInsertMembers(@Param("sessionId") Long sessionId, @Param("userIds") List<Long> userIds);
+
 
     @Select("SELECT COUNT(*) FROM chat_session_members csm " +
             "LEFT JOIN chat_sessions cs ON csm.session_id = cs.session_id " +

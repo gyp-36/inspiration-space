@@ -255,13 +255,13 @@ CREATE TABLE `pay_orders`  (
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `expired_at` datetime NULL DEFAULT NULL COMMENT '关闭时间（超时未付）',
-  `paid_at` datetime NULL DEFAULT NULL COMMENT '支付完成时间',
+  `PAY_at` datetime NULL DEFAULT NULL COMMENT '支付完成时间',
   PRIMARY KEY (`order_id`) USING BTREE,
   UNIQUE INDEX `order_no`(`order_no` ASC) USING BTREE,
   INDEX `idx_order_no`(`order_no` ASC) USING BTREE,
   INDEX `idx_user_status`(`user_id` ASC, `trade_status` ASC) USING BTREE,
   INDEX `idx_created_at`(`created_at` DESC) USING BTREE,
-  INDEX `idx_paid_at`(`paid_at` ASC) USING BTREE
+  INDEX `idx_PAY_at`(`PAY_at` ASC) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '订单主表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------

@@ -73,6 +73,15 @@ export const workService = {
   },
 
   /**
+   * 获取作品附件列表
+   * @param {Number|String} workId 作品ID
+   * @returns {Promise<Array>} 附件列表
+   */
+  getWorkAttachments: (workId) => {
+    return privateApiCall(`/works-attachments/list/${workId}`, 'GET');
+  },
+
+  /**
    * 获取热门标签
    * @param {Number} topN 前N个
    * @returns {Promise<Array>} 标签列表
@@ -86,6 +95,17 @@ export const workService = {
    */
   getTagList: (pageNum = 1, pageSize = 20) => {
     return privateApiCall(`/works-tags/list?pageNum=${pageNum}&pageSize=${pageSize}`, 'GET');
+  },
+
+  /**
+   * 获取用户作品列表 (分页)
+   * @param {Number|String} userId 用户ID
+   * @param {Number} page 页码
+   * @param {Number} size 每页数量
+   * @returns {Promise<Object>} 分页结果 (Page<WorkSimpleVo>)
+   */
+  getUserWorks: (userId, page = 1, size = 10) => {
+    return publicApiCall(`/works/user/${userId}?page=${page}&size=${size}`, 'GET');
   },
 
   /**

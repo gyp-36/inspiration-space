@@ -6,9 +6,9 @@ import lombok.Getter;
 @Getter
 public enum TradeStatus {
     CREATED(0, "创建"),
-    UNPAID(1, "未支付"),
+    UNPAY(1, "未支付"),
     PAYING(2, "支付中"),
-    PAID(3, "已支付"),
+    PAY(3, "已支付"),
     REFUND(4, "退款"),
     DELETED(5, "已删除");
 

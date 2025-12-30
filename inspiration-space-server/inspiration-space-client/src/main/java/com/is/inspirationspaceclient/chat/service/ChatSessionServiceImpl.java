@@ -1,6 +1,9 @@
 package com.is.inspirationspaceclient.chat.service;
 
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
+import org.springframework.web.socket.TextMessage;
+import java.io.IOException;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import com.is.inspirationspaceclient.chat.mapper.ChatMessageMapper;
@@ -12,6 +15,7 @@ import com.is.inspirationspaceclient.chat.model.entity.ChatSession;
 import com.is.inspirationspaceclient.chat.model.entity.ChatSessionMember;
 import com.is.inspirationspaceclient.chat.model.entity.enums.*;
 import com.is.inspirationspaceclient.chat.model.vo.ChatSessionVO;
+import com.is.inspirationspaceclient.chat.model.vo.GroupInfoVO;
 import com.is.inspirationspaceclient.chat.model.vo.GroupMemberVO;
 import com.is.inspirationspaceclient.chat.websocket.ConnectionManager;
 
@@ -32,9 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -156,6 +158,21 @@ public class ChatSessionServiceImpl implements ChatSessionService {
         member2.setJoinedAt(LocalDateTime.now());
         chatSessionMemberMapper.insert(member2);
 
+        // 3. 发送WebSocket通知给目标用户，告知新私聊会话已创建
+        JSONObject notification = new JSONObject();
+        notification.put("type", "SESSION_CREATED");
+        notification.put("sessionId", sessionId);
+        notification.put("sessionType", SessionType.PRIVATE.name());
+        notification.put("senderId", currentUserId);
+        
+        connectionManager.sendIfOnline(targetUserId, session -> {
+            try {
+                session.sendMessage(new TextMessage(notification.toJSONString()));
+            } catch (IOException e) {
+                log.error("发送私聊会话创建通知失败: targetUserId={}, sessionId={}", targetUserId, sessionId);
+            }
+        });
+
         return sessionId;
     }
 
@@ -169,11 +186,14 @@ public class ChatSessionServiceImpl implements ChatSessionService {
         // 1.创建群聊会话
         Long sessionId = snowflakeIdGenerator.nextId();
         ChatSession group = new ChatSession();
-        BeanUtils.copyProperties(createGroupRequestDto, group);
         group.setSessionId(sessionId);
         group.setSessionType(SessionType.GROUP);
         group.setCreatedBy(currentUserId);
         group.setSessionStatus(SessionStatus.NORMAL);
+        group.setDescription(createGroupRequestDto.getDescription());
+        group.setSessionName(createGroupRequestDto.getGroupName());
+        group.setRequireApproval(createGroupRequestDto.getRequiredApproval());
+
         chatSessionMapper.insert(group);
 
         // 2.添加群聊成员
@@ -350,42 +370,207 @@ public class ChatSessionServiceImpl implements ChatSessionService {
         if (member == null) {
             throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "无效操作");
         }
-        //2.批量执行添加操作
-        chatSessionMemberMapper.batchInsertMembers(sessionId, userIds);
+        //2.检查哪些用户还不是会话成员，避免重复添加
+        List<Long> usersToAdd = new ArrayList<>();
+        for (Long userId : userIds) {
+            ChatSessionMember existingMember = chatSessionMemberMapper.selectOne(
+                    new QueryWrapper<ChatSessionMember>()
+                            .eq("session_id", sessionId)
+                            .eq("user_id", userId)
+            );
+            if (existingMember == null) {
+                usersToAdd.add(userId);
+            }
+        }
+        
+        if (!usersToAdd.isEmpty()) {
+            //批量执行添加操作
+            chatSessionMemberMapper.batchInsertMembers(sessionId, usersToAdd);
+        }
+
+        //3. 发送WebSocket通知
+        for (Long userId : userIds) {
+            User user = userMapper.selectById(userId);
+            String userName = (user != null) ? user.getUsername() : "新用户";
+            
+            JSONObject notification = new JSONObject();
+            notification.put("type", "GROUP_JOIN");
+            notification.put("sessionId", sessionId);
+            notification.put("userId", userId);
+            notification.put("userName", userName);
+            
+            connectionManager.sendIfOnline(userId, session -> {
+                try {
+                    session.sendMessage(new TextMessage(notification.toJSONString()));
+                } catch (IOException e) {
+                    log.error("发送入群通知失败: userId={}, sessionId={}", userId, sessionId);
+                }
+            });
+            
+            // 同时通知群内其他成员有新成员加入
+            List<ChatSessionMember> existingMembers = chatSessionMemberMapper.selectList(
+                    new QueryWrapper<ChatSessionMember>().eq("session_id", sessionId)
+            );
+            for (ChatSessionMember m : existingMembers) {
+                if (!userIds.contains(m.getUserId())) {
+                    JSONObject groupNotif = new JSONObject();
+                    groupNotif.put("type", "GROUP_JOIN");
+                    groupNotif.put("sessionId", sessionId);
+                    groupNotif.put("userId", userId);
+                    groupNotif.put("userName", userName);
+                    connectionManager.sendIfOnline(m.getUserId(), session -> {
+                        try {
+                            session.sendMessage(new TextMessage(groupNotif.toJSONString()));
+                        } catch (IOException e) {
+                            log.error("通知群成员新用户加入失败: userId={}, sessionId={}", m.getUserId(), sessionId);
+                        }
+                    });
+                }
+            }
+        }
 
         return true;
     }
 
+    private String getAvatarUrl(String avatarPath) {
+        if (avatarPath == null || avatarPath.isEmpty()) {
+            return "";
+        }
+        if (avatarPath.startsWith("http")) {
+            return avatarPath;
+        }
+        try {
+            // 根据路径前缀判断存储桶，群组头像存储在 "group-avatars" 桶的 "groups/" 目录下
+            String bucketName = avatarPath.startsWith("groups/") ? "group-avatars" : "avatars";
+            return storageService.getPreSignedUrl(bucketName, avatarPath, 3, TimeUnit.HOURS);
+        } catch (Exception e) {
+            log.error("Failed to generate presigned URL for avatar: {}", avatarPath, e);
+            return "";
+        }
+    }
+
     @Override
     public List<ChatSessionVO> getChatSessions(String token) {
-        Long currentUserId = validateAndGetUserId(token);
+        final Long currentUserId = validateAndGetUserId(token);
 
-        // 获取用户参与的所有会话ID
-        List<Long> sessionIds = chatSessionMemberMapper.selectList(
+        // 1. 获取用户参与的所有会话ID
+        List<ChatSessionMember> userSessionMembers = chatSessionMemberMapper.selectList(
                 new QueryWrapper<ChatSessionMember>()
-                        .select("session_id")
                         .eq("user_id", currentUserId)
-        ).stream().map(ChatSessionMember::getSessionId).collect(Collectors.toList());
+        );
 
-        if (sessionIds.isEmpty()) {
+        if (userSessionMembers.isEmpty()) {
             return new ArrayList<>();
         }
 
-        // 查询这些会话的详细信息
+        List<Long> sessionIds = userSessionMembers.stream()
+                .map(ChatSessionMember::getSessionId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // 2. 查询这些会话的详细信息（只查询正常状态的会话）
         List<ChatSession> sessions = chatSessionMapper.selectList(
                 new QueryWrapper<ChatSession>()
                         .in("session_id", sessionIds)
                         .eq("session_status", SessionStatus.NORMAL)
-                        .orderByDesc("created_at")  // 按创建时间倒序排列
+                        .orderByDesc("created_at")
         );
 
-        return sessions.stream().map(session -> {
+        // 3. 预先获取所有私聊会话的对方成员信息
+        List<Long> privateSessionIds = sessions.stream()
+                .filter(s -> s.getSessionType() == SessionType.PRIVATE)
+                .map(ChatSession::getSessionId)
+                .collect(Collectors.toList());
+
+        final Map<Long, Long> sessionToTargetUserMap = new HashMap<>();
+        if (!privateSessionIds.isEmpty()) {
+            List<ChatSessionMember> allPrivateMembers = chatSessionMemberMapper.selectList(
+                    new QueryWrapper<ChatSessionMember>()
+                            .in("session_id", privateSessionIds)
+            );
+            
+            for (Long sid : privateSessionIds) {
+                allPrivateMembers.stream()
+                        .filter(m -> m.getSessionId().equals(sid) && !m.getUserId().equals(currentUserId))
+                        .findFirst()
+                        .ifPresent(m -> sessionToTargetUserMap.put(sid, m.getUserId()));
+            }
+        }
+
+        // 4. 批量查询用户信息
+        Set<Long> targetUserIds = new HashSet<>(sessionToTargetUserMap.values());
+        final Map<Long, User> userMap;
+        if (!targetUserIds.isEmpty()) {
+            List<User> users = userMapper.selectList(
+                    new QueryWrapper<User>()
+                            .in("user_id", targetUserIds)
+                            .select("user_id", "username", "avatar_url")
+            );
+            userMap = users.stream().collect(Collectors.toMap(User::getUserId, u -> u));
+        } else {
+            userMap = new HashMap<>();
+        }
+
+        // 5. 组装 VO
+        List<ChatSessionVO> sessionVOs = sessions.stream().map(session -> {
             ChatSessionVO sessionVO = new ChatSessionVO();
             sessionVO.setSessionId(session.getSessionId());
-            sessionVO.setSessionName(session.getSessionName());
-            sessionVO.setSessionAvatar(session.getSessionAvatar());
+            sessionVO.setSessionType(session.getSessionType());
+
+            if (session.getSessionType() == SessionType.PRIVATE) {
+                Long targetUserId = sessionToTargetUserMap.get(session.getSessionId());
+                if (targetUserId != null) {
+                    sessionVO.setTargetUserId(targetUserId);
+                    User targetUser = userMap.get(targetUserId);
+                    if (targetUser != null) {
+                        sessionVO.setSessionName(targetUser.getUsername());
+                        sessionVO.setSessionAvatar(getAvatarUrl(targetUser.getAvatarUrl()));
+                    } else {
+                        sessionVO.setSessionName("用户" + targetUserId);
+                        sessionVO.setSessionAvatar("");
+                    }
+                } else {
+                    sessionVO.setSessionName(session.getSessionName());
+                    sessionVO.setSessionAvatar(getAvatarUrl(session.getSessionAvatar()));
+                }
+            } else {
+                sessionVO.setSessionName(session.getSessionName());
+                sessionVO.setSessionAvatar(getAvatarUrl(session.getSessionAvatar()));
+            }
+
+            // 获取最后一条消息
+            ChatMessage lastMsg = chatMessageMapper.selectOne(
+                    new QueryWrapper<ChatMessage>()
+                            .eq("session_id", session.getSessionId())
+                            .orderByDesc("sent_at")
+                            .last("LIMIT 1")
+            );
+            
+            if (lastMsg != null && lastMsg.getSentAt() != null) {
+                sessionVO.setLastMessage(lastMsg.getContent());
+                sessionVO.setLastMessageTime(lastMsg.getSentAt().toString());
+            } else {
+                // 如果没有消息，使用会话创建时间
+                sessionVO.setLastMessageTime(session.getCreatedAt() != null ? session.getCreatedAt().toString() : LocalDateTime.now().toString());
+            }
+
+            // 获取未读数
+            sessionVO.setUnreadCount(getUnreadCountForSession(session.getSessionId(), currentUserId));
+
             return sessionVO;
         }).collect(Collectors.toList());
+
+        // 6. 按最后消息时间倒序排序
+        sessionVOs.sort((a, b) -> {
+            String timeA = a.getLastMessageTime();
+            String timeB = b.getLastMessageTime();
+            if (timeA == null && timeB == null) return 0;
+            if (timeA == null) return 1;
+            if (timeB == null) return -1;
+            return timeB.compareTo(timeA);
+        });
+
+        return sessionVOs;
     }
     
     private String getLastMessage(Long sessionId) {
@@ -403,7 +588,7 @@ public class ChatSessionServiceImpl implements ChatSessionService {
                 new QueryWrapper<ChatMessage>()
                         .eq("session_id", sessionId)
                         .ne("sender_id", userId)
-                        .eq("status", MsgStatus.DELIVERED)
+                        .in("status", MsgStatus.NORMAL, MsgStatus.SENT, MsgStatus.DELIVERED)
         );
         return count.intValue();
     }
@@ -532,12 +717,47 @@ public class ChatSessionServiceImpl implements ChatSessionService {
             memberVO.setRole(allmembers.getRole());
             if (user != null) {
                 memberVO.setUserName(user.getUsername());
-                memberVO.setAvatar(user.getAvatarUrl());
+                memberVO.setAvatar(getAvatarUrl(user.getAvatarUrl()));
             }
             return memberVO;
         }).collect(Collectors.toList());
 
         return membersVO;
+    }
+
+    @Override
+    public GroupInfoVO getGroupInfo(Long sessionId, String token) {
+        Long currentUserId = JwtUtil.getUserIdFromToken(token);
+        if (currentUserId == null) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "用户ID为空");
+        }
+
+        // 1. 判断是否是会话成员
+        ChatSessionMember member = chatSessionMemberMapper.selectOne(
+                new QueryWrapper<ChatSessionMember>()
+                        .eq("session_id", sessionId)
+                        .eq("user_id", currentUserId)
+        );
+        if (member == null) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "不是会话成员，无法查看");
+        }
+
+        // 2. 获取群信息
+        ChatSession session = chatSessionMapper.selectById(sessionId);
+        if (session == null || session.getSessionType() != SessionType.GROUP) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "群聊不存在");
+        }
+
+        // 3. 组装VO
+        GroupInfoVO groupInfoVO = new GroupInfoVO();
+        groupInfoVO.setSessionId(session.getSessionId());
+        groupInfoVO.setGroupName(session.getSessionName());
+        groupInfoVO.setDescription(session.getDescription());
+        groupInfoVO.setSessionAvatar(getAvatarUrl(session.getSessionAvatar()));
+        groupInfoVO.setRequiredApproval(session.getRequireApproval());
+        groupInfoVO.setCreatedBy(session.getCreatedBy());
+
+        return groupInfoVO;
     }
 
     @Override
@@ -658,9 +878,9 @@ public class ChatSessionServiceImpl implements ChatSessionService {
             throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "只支持图片文件上传");
         }
 
-        // 验证文件大小(例如限制为5MB)
-        if (file.getSize() > 5 * 1024 * 1024) {
-            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "文件大小不能超过5MB");
+        // 验证文件大小(例如限制为10MB)
+        if (file.getSize() > 10 * 1024 * 1024) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "文件大小不能超过10MB");
         }
 
         ChatSessionMember member = chatSessionMemberMapper.selectOne(
@@ -688,14 +908,10 @@ public class ChatSessionServiceImpl implements ChatSessionService {
             // 上传文件到 MinIO
             storageService.upload(file, bucketName, objectKey);
 
-            // 生成访问URL
-            String avatarUrl = storageService.getPreSignedUrl(bucketName, objectKey, 31, TimeUnit.DAYS);
-
-
-            // 更新群聊头像
+            // 更新群聊头像，直接存储 objectKey，在获取时动态生成预签名 URL
             ChatSession session = new ChatSession();
             session.setSessionId(sessionId);
-            session.setSessionAvatar(avatarUrl);
+            session.setSessionAvatar(objectKey);
             chatSessionMapper.updateById(session);
 
             return true;
@@ -754,6 +970,74 @@ public class ChatSessionServiceImpl implements ChatSessionService {
         return true;
     }
 
+    @Override
+    public Boolean updateGroupInfo(Long sessionId, CreateGroupRequestDto updateGroupRequestDto, String token) {
+        Long currentUserId = JwtUtil.getUserIdFromToken(token);
+        if (currentUserId == null) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "用户ID为空");
+        }
+
+        // 1. 判断是否是群成员且有权限（群主或管理员）
+        ChatSessionMember member = chatSessionMemberMapper.selectOne(
+                new QueryWrapper<ChatSessionMember>()
+                        .eq("session_id", sessionId)
+                        .eq("user_id", currentUserId)
+        );
+        if (member == null || (member.getRole() != MsgRole.OWNER && member.getRole() != MsgRole.ADMIN)) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "无权修改群信息");
+        }
+
+        // 2. 更新群信息
+        ChatSession session = chatSessionMapper.selectById(sessionId);
+        if (session == null || session.getSessionType() != SessionType.GROUP) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "群聊不存在");
+        }
+
+        if (updateGroupRequestDto.getGroupName() != null) {
+            session.setSessionName(updateGroupRequestDto.getGroupName());
+        }
+        if (updateGroupRequestDto.getDescription() != null) {
+            session.setDescription(updateGroupRequestDto.getDescription());
+        }
+        if (updateGroupRequestDto.getRequiredApproval() != null) {
+            session.setRequireApproval(updateGroupRequestDto.getRequiredApproval());
+        }
+
+        chatSessionMapper.updateById(session);
+
+        return true;
+    }
+
+    @Override
+    public Boolean markSessionAsRead(Long sessionId, String token) {
+        Long currentUserId = JwtUtil.getUserIdFromToken(token);
+        if (currentUserId == null) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "用户ID为空");
+        }
+
+        // 1. 验证用户是否是会话成员
+        ChatSessionMember member = chatSessionMemberMapper.selectOne(
+                new QueryWrapper<ChatSessionMember>()
+                        .eq("session_id", sessionId)
+                        .eq("user_id", currentUserId)
+        );
+        if (member == null) {
+            throw new IsArgumentException(ErrorCode.INVALID_PARAMETER_ERROR.getHttpStatusCode(), "您不是该会话的成员");
+        }
+
+        // 2. 将该会话中所有发给当前用户的消息标记为已读
+        ChatMessage updateMsg = new ChatMessage();
+        updateMsg.setStatus(MsgStatus.READ);
+        
+        chatMessageMapper.update(updateMsg, 
+                new QueryWrapper<ChatMessage>()
+                        .eq("session_id", sessionId)
+                        .ne("sender_id", currentUserId)
+                        .in("status", MsgStatus.NORMAL, MsgStatus.SENT, MsgStatus.DELIVERED)
+        );
+
+        return true;
+    }
 
     /**
      * 广播消息给会话的所有成员

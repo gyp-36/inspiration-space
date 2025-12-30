@@ -4,22 +4,24 @@ package com.is.inspirationspaceclient.work.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.is.inspirationspaceclient.work.mapper.WorkStatsMapper;
 import com.is.inspirationspaceclient.work.model.entity.WorkStats;
-import com.is.inspirationspaceclient.work.model.vo.WorkStateVo;
+import com.is.inspirationspaceclient.work.model.vo.WorkRankVo;
 import com.is.inspirationspaceclient.forum.mapper.ForumUserActionsMapper;
 import com.is.inspirationspaceclient.forum.model.entity.ForumUserActions;
 import com.is.inspirationspaceclient.forum.model.entity.enums.TargetType;
+import com.is.inspirationspacecommon.config.StorageService;
 import com.is.inspirationspacecommon.redis.RedisCache;
 import com.is.inspirationspacecommon.redis.RedisKeyBuild;
 import com.is.inspirationspacecommon.redis.RedisKeyManage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
@@ -42,6 +44,9 @@ public class WorkStateServiceImpl implements WorkStateService {
 
     @Autowired
     private ForumUserActionsMapper userActionsMapper;
+
+    @Autowired
+    private StorageService storageService;
 
     private void incrementHashCount(Long workId, String field) {
         changeHashCount(workId, field, 1);
@@ -265,7 +270,7 @@ public class WorkStateServiceImpl implements WorkStateService {
     }
 
     @Override
-    public List<WorkStateVo> getWorkSalesRank(int topN) {
+    public List<WorkRankVo> getWorkSalesRank(int topN) {
         // 1. 验证参数
         if (topN <= 0) {
             return Collections.emptyList();
@@ -282,10 +287,20 @@ public class WorkStateServiceImpl implements WorkStateService {
             }
 
             // 4. 从缓存直接获取排序后的前topN条数据
-            Set<WorkStateVo> cachedResult = redisCache.rangeZSet(key, 0, topN - 1, WorkStateVo.class);
-            if (cachedResult != null && !cachedResult.isEmpty()) {
-                return new ArrayList<>(cachedResult);
-            }
+                Set<WorkRankVo> cachedResult = null;
+                try {
+                    cachedResult = redisCache.rangeZSet(key, 0, topN - 1, WorkRankVo.class);
+                } catch (Exception e) {
+                    log.warn("从缓存获取点赞排行榜失败，尝试转换类型... key: {}", key.getRelKey());
+                    // 如果发生类型转换异常，说明缓存数据结构可能不一致，删除旧缓存
+                    redisCache.del(RedisKeyBuild.createRedisKey(key.getRelKey()));
+                }
+
+                if (cachedResult != null && !cachedResult.isEmpty()) {
+                    List<WorkRankVo> list = new ArrayList<>(cachedResult);
+                    processWorkRankVoUrls(list);
+                    return list;
+                }
 
             // 5. 缓存为空，使用双重检查加锁防止缓存击穿
             String lockKey = key.getRelKey() + ":lock";
@@ -297,24 +312,26 @@ public class WorkStateServiceImpl implements WorkStateService {
 
             try {
                 // 二次检查，避免多个线程同时重建缓存
-                cachedResult = redisCache.rangeZSet(key, 0, topN - 1, WorkStateVo.class);
+                cachedResult = redisCache.rangeZSet(key, 0, topN - 1, WorkRankVo.class);
                 if (cachedResult != null && !cachedResult.isEmpty()) {
                     return new ArrayList<>(cachedResult);
                 }
 
                 // 6. 从数据库获取作品日销量排行榜
-                List<WorkStateVo> workStateVos = workStatsMapper.selectWorkSalesRank(topN);
+                List<WorkRankVo> workRankVos = workStatsMapper.selectWorkSalesRank(topN);
 
                 // 7. 处理空结果
-                if (CollectionUtils.isEmpty(workStateVos)) {
+                if (CollectionUtils.isEmpty(workRankVos)) {
                     // 设置空结果标记（短期缓存）
                     redisCache.set(RedisKeyBuild.createRedisKey(emptyKey), "1", 10, TimeUnit.MINUTES);
                     return Collections.emptyList();
                 }
 
                 // 8. 更新缓存
-                updateCache(key, workStateVos, topN);
-                return new ArrayList<>(workStateVos.subList(0, Math.min(topN, workStateVos.size())));
+                updateCache(key, workRankVos, topN);
+                List<WorkRankVo> result = new ArrayList<>(workRankVos.subList(0, Math.min(topN, workRankVos.size())));
+                processWorkRankVoUrls(result);
+                return result;
 
             } finally {
                 redisCache.del(RedisKeyBuild.createRedisKey(lockKey));
@@ -327,21 +344,24 @@ public class WorkStateServiceImpl implements WorkStateService {
     }
 
     // 数据库查询+返回结果
-    private List<WorkStateVo> queryAndReturnFromDb(int topN) {
-        List<WorkStateVo> workStateVos = workStatsMapper.selectWorkSalesRank(topN);
-        return workStateVos != null
-                ? new ArrayList<>(workStateVos.subList(0, Math.min(topN, workStateVos.size())))
-                : Collections.emptyList();
+    private List<WorkRankVo> queryAndReturnFromDb(int topN) {
+        List<WorkRankVo> workRankVos = workStatsMapper.selectWorkSalesRank(topN);
+        if (workRankVos == null) {
+            return Collections.emptyList();
+        }
+        List<WorkRankVo> result = new ArrayList<>(workRankVos.subList(0, Math.min(topN, workRankVos.size())));
+        processWorkRankVoUrls(result);
+        return result;
     }
 
-    private void updateCache(RedisKeyBuild key, List<WorkStateVo> workStateVos, int topN) {
+    private void updateCache(RedisKeyBuild key, List<WorkRankVo> workRankVos, int topN) {
         try {
             // 清理旧的空结果标记
             String emptyKey = key.getRelKey() + ":empty";
             redisCache.del(RedisKeyBuild.createRedisKey(emptyKey));
 
             // 使用销量作为排序依据构建ZSet
-            Map<Object, Double> scoreMap = workStateVos.stream()
+            Map<Object, Double> scoreMap = workRankVos.stream()
                     .collect(Collectors.toMap(
                             Function.identity(),
                             vo -> (double) vo.getTotalSales() // 确保使用正确的销量字段
@@ -359,8 +379,100 @@ public class WorkStateServiceImpl implements WorkStateService {
 
 
     @Override
-    public List<WorkStateVo> getWorkLikeRank(int topN) {
-        return List.of();
+    public List<WorkRankVo> getWorkLikeRank(int topN) {
+        // 1. 验证参数
+        if (topN <= 0) {
+            return Collections.emptyList();
+        }
+
+        // 2. 定义缓存key
+        RedisKeyBuild key = RedisKeyBuild.createRedisKey(RedisKeyManage.WORK_LIKE_RANK_DAY);
+        String emptyKey = key.getRelKey() + ":empty"; // 空结果标记key
+
+        try {
+            // 3. 优先检查空结果标记（防止缓存穿透）
+            if (redisCache.hasKey(RedisKeyBuild.createRedisKey(emptyKey))) {
+                return Collections.emptyList();
+            }
+
+            // 4. 从缓存直接获取排序后的前topN条数据
+            Set<WorkRankVo> cachedResult = redisCache.rangeZSet(key, 0, topN - 1, WorkRankVo.class);
+            if (cachedResult != null && !cachedResult.isEmpty()) {
+                List<WorkRankVo> list = new ArrayList<>(cachedResult);
+                processWorkRankVoUrls(list);
+                return list;
+            }
+
+            // 5. 缓存为空，使用双重检查加锁防止缓存击穿
+            String lockKey = key.getRelKey() + ":lock";
+            boolean locked = redisCache.set(RedisKeyBuild.createRedisKey(lockKey), 3, 10, TimeUnit.SECONDS);
+            if (!locked) {
+                // 获取锁失败，直接查询数据库
+                return queryLikeRankFromDb(topN);
+            }
+
+            try {
+                    // 二次检查
+                    cachedResult = null;
+                    try {
+                        cachedResult = redisCache.rangeZSet(key, 0, topN - 1, WorkRankVo.class);
+                    } catch (Exception e) {
+                        // 忽略转换异常
+                    }
+                    
+                    if (cachedResult != null && !cachedResult.isEmpty()) {
+                        return new ArrayList<>(cachedResult);
+                    }
+
+                // 6. 从数据库获取作品点赞排行榜
+                List<WorkRankVo> workRankVos = workStatsMapper.selectWorkLikeRank(topN);
+
+                // 7. 处理空结果
+                if (CollectionUtils.isEmpty(workRankVos)) {
+                    redisCache.set(RedisKeyBuild.createRedisKey(emptyKey), "1", 10, TimeUnit.MINUTES);
+                    return Collections.emptyList();
+                }
+
+                // 8. 更新缓存
+                updateLikeCache(key, workRankVos);
+                List<WorkRankVo> result = new ArrayList<>(workRankVos.subList(0, Math.min(topN, workRankVos.size())));
+                processWorkRankVoUrls(result);
+                return result;
+
+            } finally {
+                redisCache.del(RedisKeyBuild.createRedisKey(lockKey));
+            }
+        } catch (Exception e) {
+            log.error("获取作品点赞排行榜异常, key: {}", key.getRelKey(), e);
+            return queryLikeRankFromDb(topN);
+        }
+    }
+
+    private List<WorkRankVo> queryLikeRankFromDb(int topN) {
+        List<WorkRankVo> workRankVos = workStatsMapper.selectWorkLikeRank(topN);
+        if (workRankVos == null) {
+            return Collections.emptyList();
+        }
+        List<WorkRankVo> result = new ArrayList<>(workRankVos.subList(0, Math.min(topN, workRankVos.size())));
+        processWorkRankVoUrls(result);
+        return result;
+    }
+
+    private void updateLikeCache(RedisKeyBuild key, List<WorkRankVo> workRankVos) {
+        try {
+            String emptyKey = key.getRelKey() + ":empty";
+            redisCache.del(RedisKeyBuild.createRedisKey(emptyKey));
+
+            Map<Object, Double> scoreMap = workRankVos.stream()
+                    .collect(Collectors.toMap(
+                            Function.identity(),
+                            vo -> (double) vo.getLikeCount()
+                    ));
+
+            redisCache.addZSetAll(key, scoreMap, 23, TimeUnit.HOURS);
+        } catch (Exception e) {
+            log.warn("更新点赞排行榜缓存失败, key: {}", key.getRelKey(), e);
+        }
     }
 
 
@@ -369,6 +481,44 @@ public class WorkStateServiceImpl implements WorkStateService {
     @Scheduled(fixedRate = 60 * 60 * 1000)
     @Async
     public void preheatHotData() {
-        getWorkSalesRank(10); // 预热前10名数据
+        getWorkSalesRank(10); // 预热销量榜前10名数据
+        getWorkLikeRank(10);  // 预热点赞榜前10名数据
+    }
+
+    private void processWorkRankVoUrls(List<WorkRankVo> vos) {
+        if (CollectionUtils.isEmpty(vos)) {
+            return;
+        }
+        for (WorkRankVo vo : vos) {
+            String coverKey = vo.getCover();
+            if (coverKey != null && !coverKey.isEmpty()) {
+                // 如果是已经签名的URL，且包含 /work/ 路径，尝试重新签名（因为之前的可能已过期）
+                String objectKey = coverKey;
+                if (coverKey.startsWith("http") && coverKey.contains("/work/")) {
+                    try {
+                        int bucketIndex = coverKey.indexOf("/work/");
+                        String path = coverKey.substring(bucketIndex + "/work/".length());
+                        int queryIndex = path.indexOf("?");
+                        if (queryIndex != -1) {
+                            objectKey = path.substring(0, queryIndex);
+                        } else {
+                            objectKey = path;
+                        }
+                        objectKey = java.net.URLDecoder.decode(objectKey, java.nio.charset.StandardCharsets.UTF_8);
+                    } catch (Exception e) {
+                        log.warn("尝试从URL提取Key失败: {}", coverKey);
+                    }
+                }
+
+                if (!objectKey.startsWith("http")) {
+                    try {
+                        String signedUrl = storageService.getPreSignedUrl("work", objectKey, 1, TimeUnit.HOURS);
+                        vo.setCover(signedUrl);
+                    } catch (Exception e) {
+                        log.error("生成作品排行榜封面预签名URL失败: {}", objectKey, e);
+                    }
+                }
+            }
+        }
     }
 }

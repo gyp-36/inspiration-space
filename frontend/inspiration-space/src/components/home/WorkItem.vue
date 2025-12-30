@@ -10,7 +10,7 @@
     <div class="work-content">
       <div class="work-title-row">
         <h3 class="work-title">{{ work.title || '无标题' }}</h3>
-        <div class="price-container" v-if="isPaid">
+        <div class="price-container" v-if="isPAY">
           <span class="title-price">¥{{ work.price }}</span>
           <button class="purchase-btn" @click.stop="handleBuy">购买</button>
         </div>
@@ -27,7 +27,7 @@
         <span class="tag" v-for="(tag, index) in displayTags" :key="index">{{ tag }}</span>
       </div>
       
-      <div class="stats-row">
+      <div class="stats-row" v-if="!hideStats">
         <div class="stat-item" title="浏览">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
@@ -111,14 +111,18 @@ const props = defineProps({
       isLiked: false,
       isCollected: false
     })
+  },
+  hideStats: {
+    type: Boolean,
+    default: false
   }
 });
 
-// 计算属性：是否付费
-const isPaid = computed(() => {
+// 计算属性：是否付费（且未购买）
+const isPAY = computed(() => {
   const strategy = props.work.accessStrategy || props.work.accessType || 'FREE';
   const strategyUpper = String(strategy).toUpperCase();
-  return strategyUpper === 'PAY' || strategyUpper === 'PAID';
+  return strategyUpper === 'PAY' && !props.work.isPurchased;
 });
 
 // 优化：乐观更新逻辑
@@ -204,9 +208,13 @@ const handleBuy = (e) => {
     ElMessage.warning('请先登录后再购买');
     return;
   }
-  // 跳转到作品详情页进行购买，或者直接在这里触发购买逻辑
-  // 按照通常逻辑，点击购买建议跳转到详情页查看详情后再确认购买，或者弹出支付确认
-  // 这里先实现跳转到详情页并携带购买参数，或者直接提示
+  
+  if (props.work.isPurchased) {
+    ElMessage.success('您已拥有该作品');
+    return;
+  }
+
+  // 跳转到作品详情页进行购买
   router.push(`/work/${props.work.workId}?action=buy`);
 };
 
@@ -240,8 +248,7 @@ const accessText = computed(() => {
     case 'FREE': return '免费';
     case 'MEMBER_FREE': 
     case 'VIP': return 'VIP';
-    case 'PAY':
-    case 'PAID': return '付费';
+    case 'PAY': return '付费';
     default: return '免费';
   }
 });
@@ -251,7 +258,7 @@ const accessBadgeClass = computed(() => {
   const strategy = props.work.accessStrategy || props.work.accessType || 'FREE';
   const strategyUpper = String(strategy).toUpperCase();
   if (strategyUpper === 'MEMBER_FREE' || strategyUpper === 'VIP') return 'access-vip';
-  if (strategyUpper === 'PAY' || strategyUpper === 'PAID') return 'access-paid';
+  if (strategyUpper === 'PAY') return 'access-PAY';
   return 'access-free';
 });
 
@@ -360,7 +367,7 @@ onMounted(() => {
   background-color: #faad14;
 }
 
-.access-paid {
+.access-PAY {
   background-color: #fa541c;
 }
 

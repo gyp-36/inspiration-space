@@ -9,6 +9,10 @@ import java.util.List;
 public interface ChatMessageService {
 
     Integer getUnreadCount(String token);
-    
+
     List<ChatMessage> getMessageHistory(Long sessionId, String token);
+
+    Long sendMessage(SendMessageRequestDto sendMessageRequestDto, String token);
+
+    Boolean markMessageAsRead(Long messageId, String token);
 }

@@ -17,6 +17,9 @@ public class PaymentDto implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
+    @Schema(name = "draftId", type = "String", description = "订单草稿ID")
+    private String draftId;
+
     @Schema(name = "subject", type = "String", description = "订单标题")
     private String subject;
 

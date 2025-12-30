@@ -6,15 +6,20 @@
       <a href="#" class="more-link">更多 ></a>
     </div>
     
-    <div class="ranking-list">
+    <div class="ranking-list" v-if="!loading && ranking.length > 0">
       <div 
         v-for="item in ranking" 
         :key="item.rank" 
         class="ranking-item"
         :class="{ 'top-rank': item.rank <= 3 }"
+        @click="goToDetail(item.workId)"
       >
         <div class="rank-badge" :class="`rank-${item.rank}`">
           {{ item.rank }}
+        </div>
+        
+        <div class="work-cover">
+          <img :src="item.cover || defaultImage" alt="封面" @error="handleImageError" />
         </div>
         
         <div class="work-info">
@@ -36,15 +41,24 @@
         </div>
       </div>
     </div>
+    <div v-else-if="loading" class="loading-placeholder">
+      正在加载排行榜...
+    </div>
+    <div v-else class="empty-placeholder">
+      暂无排行榜数据
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { workService } from '@/services/workService';
 
+const router = useRouter();
 const ranking = ref([]);
 const loading = ref(false);
+const defaultImage = 'https://bailian-bmp-pre.oss-cn-hangzhou.aliyuncs.com/public/system_agent/PlaceHolder.png';
 
 const fetchRanking = async () => {
   loading.value = true;
@@ -53,15 +67,28 @@ const fetchRanking = async () => {
     if (res) {
       ranking.value = res.map((item, index) => ({
         rank: index + 1,
-        name: item.workName || `作品 ${item.workId}`,
-        score: item.likeCount || 0,
-        workId: item.workId
+        name: item.title || item.name || `作品 ${item.workId || item.id || index + 1}`,
+        score: item.likeCount ?? item.score ?? 0,
+        workId: item.workId || item.id,
+        cover: item.cover || item.coverUrl || item.cover_url || item.cover_URL || defaultImage
       }));
     }
   } catch (error) {
     console.error('获取热门榜单失败:', error);
   } finally {
     loading.value = false;
+  }
+};
+
+const goToDetail = (workId) => {
+  if (workId) {
+    router.push(`/work/${workId}`);
+  }
+};
+
+const handleImageError = (e) => {
+  if (e.target.src !== defaultImage) {
+    e.target.src = defaultImage;
   }
 };
 
@@ -150,6 +177,28 @@ onMounted(() => {
   background: #f0f0f0;
 }
 
+.work-cover {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-right: 12px;
+  flex-shrink: 0;
+  background-color: #f5f5f5;
+  border: 1px solid #f0f0f0;
+}
+
+.work-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.ranking-item:hover .work-cover img {
+  transform: scale(1.1);
+}
+
 /* 前三名样式 */
 .rank-1 { color: white; background: #ff4d4f; }
 .rank-2 { color: white; background: #ff7a45; }
@@ -190,9 +239,16 @@ onMounted(() => {
 }
 
 .trend-icon {
-  margin-left: 8px;
+  margin-left: auto;
   display: flex;
   align-items: center;
+}
+
+.loading-placeholder, .empty-placeholder {
+  padding: 40px 0;
+  text-align: center;
+  color: #8c8c8c;
+  font-size: 14px;
 }
 
 /* 响应式调整 */

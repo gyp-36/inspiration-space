@@ -22,6 +22,11 @@
             <artifactId>inspiration-space-common</artifactId>
             <version>0.0.1-SNAPSHOT</version>
         </dependency>
+        <dependency>
+            <groupId>com.is</groupId>
+            <artifactId>inspiration-space-admin</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
         <!-- Spring Boot核心依赖 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

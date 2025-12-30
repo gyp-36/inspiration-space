@@ -102,7 +102,7 @@ public class WorkController {
     }
 
     @Operation(summary = "获取用户作品列表(所有人)")
-    @GetMapping("/get/{userId}")
+    @GetMapping("/user/{userId}")
     public ApiResponse<Page<WorkSimpleVo>> getUserWorks(
             @PathVariable Long userId,
             @RequestParam(defaultValue = "1") int page,

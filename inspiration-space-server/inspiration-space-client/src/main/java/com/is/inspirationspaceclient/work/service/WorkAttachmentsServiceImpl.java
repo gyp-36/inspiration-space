@@ -2,6 +2,10 @@ package com.is.inspirationspaceclient.work.service;
 
 
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.is.inspirationspaceclient.payment.mapper.PayOrderMapper;
+import com.is.inspirationspaceclient.payment.model.entity.PayOrder;
+import com.is.inspirationspaceclient.payment.model.entity.enums.TradeStatus;
 import com.is.inspirationspaceclient.work.mapper.WorkAttachmentsMapper;
 import com.is.inspirationspaceclient.work.mapper.WorkInfoMapper;
 import com.is.inspirationspaceclient.work.mapper.WorkStatsMapper;
@@ -11,6 +15,7 @@ import com.is.inspirationspaceclient.work.model.vo.WorkAttachmentVo;
 import com.is.inspirationspacecommon.config.StorageService;
 import com.is.inspirationspacecommon.enums.ErrorCode;
 import com.is.inspirationspacecommon.exception.IsArgumentException;
+import com.is.inspirationspacecommon.exception.IsServiceException;
 import com.is.inspirationspacecommon.exception.IsSystemException;
 import com.is.inspirationspacecommon.util.JwtUtil;
 import com.is.inspirationspacecommon.util.generator.SnowflakeIdGenerator;
@@ -26,6 +31,8 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -50,8 +57,12 @@ public class WorkAttachmentsServiceImpl implements WorkAttachmentsService {
 
     @Autowired
     private WorkInfoMapper workInfoMapper;
+
     @Autowired
     private WorkStatsMapper workStatsMapper;
+
+    @Autowired
+    private PayOrderMapper payOrderMapper;
 
 
     @Override
@@ -156,10 +167,59 @@ public class WorkAttachmentsServiceImpl implements WorkAttachmentsService {
     }
 
     @Override
-    public List<WorkAttachmentVo> getWorkAttachments(Long workId) {
-        //1.
+    public List<WorkAttachmentVo> getWorkAttachments(String token, Long workId) {
+        // 1. 获取作品信息
+        WorkInfo workInfo = workInfoMapper.selectById(workId);
+        if (workInfo == null) {
+            throw new IsArgumentException(ErrorCode.WORK_NOT_FOUND.getHttpStatusCode(), "作品不存在");
+        }
 
-        return List.of();
+        // 2. 检查访问权限
+        Long userId = null;
+        boolean hasAccess = false;
+        
+        if (token != null && !token.isEmpty()) {
+            userId = JwtUtil.getUserIdFromToken(token);
+            // 作品作者可以访问
+            if (workInfo.getCreatorId().equals(userId)) {
+                hasAccess = true;
+            }
+            // 检查是否已购买
+            if (!hasAccess && workInfo.getAccessStrategy() == com.is.inspirationspaceclient.work.model.entity.enums.AccessStrategy.PAY) {
+                QueryWrapper<PayOrder> orderQuery = new QueryWrapper<>();
+                orderQuery.eq("user_id", userId)
+                        .eq("product_id", workId)
+                        .eq("trade_status", TradeStatus.PAY);
+                Long count = payOrderMapper.selectCount(orderQuery);
+                hasAccess = count > 0;
+            }
+        }
+        
+        // 免费作品所有人都可以访问
+        if (!hasAccess && workInfo.getAccessStrategy() != com.is.inspirationspaceclient.work.model.entity.enums.AccessStrategy.PAY) {
+            hasAccess = true;
+        }
+        
+        // 如果没有访问权限，返回空列表
+        if (!hasAccess) {
+            return List.of();
+        }
+
+        // 3. 获取作品关联的所有附件
+        List<WorkAttachment> attachments = workAttachmentsMapper.selectByWorkId(workId);
+        
+        // 4. 转换为 VO 列表
+        return attachments.stream().map(attachment -> {
+            WorkAttachmentVo vo = new WorkAttachmentVo();
+            vo.setId(attachment.getId());
+            vo.setFileName(attachment.getFileName());
+            vo.setFileSize(attachment.getFileSize());
+            vo.setFileExtension(attachment.getFileExtension());
+
+            String downloadUrl = storageService.getPreSignedUrl(attachment.getBucketName(), attachment.getObjectKey(), 30, TimeUnit.MINUTES);
+            vo.setDownloadUrl(downloadUrl);
+            return vo;
+        }).collect(Collectors.toList());
     }
 
 }

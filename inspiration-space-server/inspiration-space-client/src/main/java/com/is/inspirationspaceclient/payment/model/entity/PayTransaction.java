@@ -24,6 +24,12 @@ public class PayTransaction implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
+     * 订单草稿ID
+     */
+    @TableField("draft_id")
+    private String draftId;
+
+    /**
      * 交易记录ID
      */
     @TableId(value = "transaction_id")

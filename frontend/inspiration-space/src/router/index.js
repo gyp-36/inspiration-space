@@ -36,7 +36,7 @@ const router = createRouter({
     {
       path: '/chat',
       name: 'chat',
-      component: () => import('../views/ChatContainer.vue'),
+      component: () => import('../views/ChatContainerOptimized.vue'),
     },
     {
       path: '/publish',
@@ -47,6 +47,11 @@ const router = createRouter({
       path: '/work/:workId',
       name: 'work-detail',
       component: () => import('../views/WorkDetail.vue'),
+    },
+    {
+      path: '/payment/:workId',
+      name: 'payment',
+      component: () => import('../views/Payment.vue'),
     }
   ],
 })

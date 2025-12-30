@@ -32,6 +32,7 @@ public enum RedisKeyManage {
     PLATFORM_NOTICE_FLAG("platform_notice_flag","platform_notice_flag的key","platform_notice_flag的value"),
 
     WORK_SALES_RANK_DAY("work_sales_rank_day","日销量排行榜" ,"销量前10" ),
+    WORK_LIKE_RANK_DAY("work_like_rank_day","日点赞排行榜" ,"点赞前10" ),
     ORDER_DRAFT_REQUEST("order_request_%s_%s","订单key","订单号"),
     ORDER_DRAFT("order_draft_%s","订单Id" ,"订单Id" ),
     USER_ORDER("user_order_%s","用户临时订单" ,"用户临时订单" ),

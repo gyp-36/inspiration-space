@@ -14,6 +14,11 @@ import com.is.inspirationspaceclient.user.model.entity.enums.FollowType;
 import com.is.inspirationspaceclient.user.model.entity.enums.UserStatus;
 import com.is.inspirationspaceclient.user.model.vo.*;
 import com.is.inspirationspaceclient.user.rabbitmq.UserMessageProducer;
+import com.is.inspirationspaceclient.work.controller.WorkController;
+import com.is.inspirationspaceclient.work.mapper.WorkInfoMapper;
+import com.is.inspirationspaceclient.work.mapper.WorkStatsMapper;
+import com.is.inspirationspaceclient.work.model.entity.WorkInfo;
+import com.is.inspirationspaceclient.work.model.entity.WorkStats;
 import com.is.inspirationspacecommon.config.StorageService;
 import com.is.inspirationspacecommon.enums.ErrorCode;
 import com.is.inspirationspacecommon.exception.IsArgumentException;
@@ -76,6 +81,10 @@ public class UserServiceImpl implements UserService {
     private StorageService storageService;
 
     private UserRelationshipMapper userRelationshipMapper;
+
+    private WorkStatsMapper workStatsMapper;
+
+    private WorkInfoMapper workInfoMapper;
 
     @Transactional(rollbackFor = Exception.class)
     @Override
@@ -702,9 +711,10 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public List<UserVo> getUserRanking(int topN) {
+    public List<UserRankVo> getUserRanking(int topN) {
         // 1. 查询统计信息排名前 N 的用户 ID
         List<UserStats> topStats = userStatsMapper.selectList(new QueryWrapper<UserStats>()
+                .select("likes_count","user_id")
                 .orderByDesc("likes_count")
                 .last("LIMIT " + topN));
 
@@ -714,15 +724,33 @@ public class UserServiceImpl implements UserService {
 
         // 2. 批量查询用户信息并组合
         return topStats.stream().map(stats -> {
-            UserVo vo = new UserVo();
-            User user = userMapper.selectById(stats.getUserId());
+            UserRankVo vo = new UserRankVo();
+            User user = userMapper.selectOne(new QueryWrapper<User>()
+                    .select("user_id", "username", "avatar_url")
+                    .eq("user_id", stats.getUserId())
+            );
             if (user != null) {
-                vo.setId(user.getUserId());
+                vo.setUserId(user.getUserId());
                 vo.setUsername(user.getUsername());
-                vo.setAvatarUrl(user.getAvatarUrl());
-                vo.setBio(user.getBio());
+                
+                // 处理头像 URL
+                String avatarKey = user.getAvatarUrl();
+                if (StringUtil.isNotEmpty(avatarKey)) {
+                    if (avatarKey.startsWith("http")) {
+                        vo.setAvatar(avatarKey);
+                    } else {
+                        try {
+                            // 从 StorageService 获取预签名 URL
+                            String signedUrl = storageService.getPreSignedUrl("avatars", avatarKey, 1, TimeUnit.HOURS);
+                            vo.setAvatar(signedUrl);
+                        } catch (Exception e) {
+                            log.error("生成用户排行榜头像预签名URL失败: {}", avatarKey, e);
+                            vo.setAvatar(null);
+                        }
+                    }
+                }
             }
-            BeanUtils.copyProperties(stats, vo, "update_time", "user_id");
+            BeanUtils.copyProperties(stats, vo, "user_id");
             return vo;
         }).collect(Collectors.toList());
     }

@@ -181,7 +181,7 @@ const handleSearch = () => {
 };
 
 /**
- * 登录回调（透传至store的login方法）
+ * 登录回调
  * @param {Object} loginData 登录表单数据
  */
 const handleLogin = async (loginData) => {
@@ -189,7 +189,7 @@ const handleLogin = async (loginData) => {
 };
 
 /**
- * 注册回调（透传至store的register方法）
+ * 注册回调
  * @param {Object} registerData 注册表单数据
  */
 const handleRegister = async (registerData) => {
@@ -207,8 +207,6 @@ const handleForgotPassword = async (forgotData) => {
   }
   
   try {
-    // 模拟找回密码逻辑，后续可迁移至 store
-    // await userStore.forgotPassword(forgotData)
     ElMessage.success('密码重置成功，请使用新密码登录');
     userStore.switchView('login');
   } catch (error) {
@@ -220,7 +218,6 @@ const handleForgotPassword = async (forgotData) => {
 
 
 <style scoped>
-/* 全局基础优化 - 增加页面背景层，与导航栏形成区分 */
 :deep(body) {
   background-color: #f5f7fa; /* 页面底层浅灰，突出导航栏 */
   margin: 0;

@@ -92,4 +92,7 @@ public class WorkDetailVo implements Serializable {
 
     @Schema(description = "是否已收藏")
     private Boolean isCollected;
+
+    @Schema(description = "是否已购买")
+    private Boolean isPurchased;
 }

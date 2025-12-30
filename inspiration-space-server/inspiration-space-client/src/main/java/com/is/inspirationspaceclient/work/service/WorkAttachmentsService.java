@@ -19,6 +19,5 @@ public interface WorkAttachmentsService {
 
     Boolean deleteWorkAttachment(Long attachmentId, String token);
 
-
-    List<WorkAttachmentVo> getWorkAttachments(Long workId);
+    List<WorkAttachmentVo> getWorkAttachments(String token, Long workId);
 }

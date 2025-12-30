@@ -121,6 +121,6 @@ public class PayOrder implements Serializable {
     /**
      * 支付完成时间
      */
-    @TableField("paid_at")
-    private LocalDateTime paidAt;
+    @TableField("PAY_at")
+    private LocalDateTime PAYAt;
 }

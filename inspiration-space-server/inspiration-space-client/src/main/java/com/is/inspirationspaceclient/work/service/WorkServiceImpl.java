@@ -91,6 +91,9 @@ public class WorkServiceImpl implements WorkService {
     @Autowired
     private WorkStateService workStateService;
 
+    @Autowired
+    private com.is.inspirationspaceclient.payment.mapper.PayOrderMapper payOrderMapper;
+
     /**
      * 创建作品草稿
      *
@@ -449,59 +452,15 @@ public class WorkServiceImpl implements WorkService {
             throw new IsArgumentException(ErrorCode.WORK_ALREADY_DELETED.getHttpStatusCode(), "作品已被删除");
         }
         WorkDetailVo workDetailVo = new WorkDetailVo();
-        BeanUtils.copyProperties(workInfo, workDetailVo, "create_at");
-        // 处理封面图
-        String coverKey = workInfo.getCoverUrl();
-        if (StringUtils.isNotBlank(coverKey)) {
-             // 尝试提取 ObjectKey (如果数据库存的是完整URL)
-            String objectKey = coverKey;
-            if (coverKey.startsWith("http") && coverKey.contains("/work/")) {
-                try {
-                    int bucketIndex = coverKey.indexOf("/work/");
-                    String path = coverKey.substring(bucketIndex + "/work/".length());
-                    int queryIndex = path.indexOf("?");
-                    if (queryIndex != -1) {
-                        objectKey = path.substring(0, queryIndex);
-                    } else {
-                        objectKey = path;
-                    }
-                    objectKey = java.net.URLDecoder.decode(objectKey, java.nio.charset.StandardCharsets.UTF_8);
-                } catch (Exception e) {
-                    log.warn("尝试从URL提取Key失败: {}", coverKey);
-                }
-            }
+        BeanUtils.copyProperties(workInfo, workDetailVo, "createdAt");
+        workDetailVo.setAuthorId(workInfo.getCreatorId());
+        workDetailVo.setCoverUrl(processCoverUrl(workInfo.getCoverUrl()));
 
-            if (!objectKey.startsWith("http")) {
-                // 如果是对象键，生成预签名URL
-                try {
-                    String signedUrl = storageService.getPreSignedUrl("work", objectKey, 1, TimeUnit.HOURS);
-                    workDetailVo.setCoverUrl(signedUrl);
-                } catch (Exception e) {
-                    log.error("生成作品封面预签名URL失败: {}", objectKey, e);
-                    workDetailVo.setCoverUrl(null);
-                }
-            } else {
-                workDetailVo.setCoverUrl(coverKey);
-            }
-        }
         //3. 获取作者信息
         User user = userMapper.selectById(workInfo.getCreatorId());
         if (user != null) {
             workDetailVo.setAuthorName(user.getUsername());
-            String avatarKey = user.getAvatarUrl();
-            if (StringUtils.isNotBlank(avatarKey)) {
-                if (avatarKey.startsWith("http")) {
-                    workDetailVo.setAuthorAvatar(avatarKey);
-                } else {
-                    try {
-                        String signedUrl = storageService.getPreSignedUrl("avatars", avatarKey, 1, TimeUnit.HOURS);
-                        workDetailVo.setAuthorAvatar(signedUrl);
-                    } catch (Exception e) {
-                        log.error("生成作者头像预签名URL失败: {}", avatarKey, e);
-                        workDetailVo.setAuthorAvatar(null);
-                    }
-                }
-            }
+            workDetailVo.setAuthorAvatar(processAvatarUrl(user.getAvatarUrl()));
         }
 
         // 4. 获取统计数据
@@ -542,42 +501,16 @@ public class WorkServiceImpl implements WorkService {
         workStateService.incrementViewCount(workId, userId);
 
         WorkDetailVo workDetailVo = new WorkDetailVo();
-        BeanUtils.copyProperties(workInfo, workDetailVo, "create_at");
+        BeanUtils.copyProperties(workInfo, workDetailVo, "createdAt");
         workDetailVo.setAuthorId(workInfo.getCreatorId());
         
-        // 处理封面图逻辑 (复用)
-        String coverKey = workInfo.getCoverUrl();
-        if (StringUtils.isNotBlank(coverKey)) {
-            // ... (复用之前的逻辑，简化处理)
-            if (!coverKey.startsWith("http")) {
-                 try {
-                    String signedUrl = storageService.getPreSignedUrl("work", coverKey, 1, TimeUnit.HOURS);
-                    workDetailVo.setCoverUrl(signedUrl);
-                } catch (Exception e) {
-                    workDetailVo.setCoverUrl(null);
-                }
-            } else {
-                workDetailVo.setCoverUrl(coverKey);
-            }
-        }
+        workDetailVo.setCoverUrl(processCoverUrl(workInfo.getCoverUrl()));
 
         // 获取作者信息
         User user = userMapper.selectById(workInfo.getCreatorId());
         if (user != null) {
             workDetailVo.setAuthorName(user.getUsername());
-            String avatarKey = user.getAvatarUrl();
-            if (StringUtils.isNotBlank(avatarKey)) {
-                if (avatarKey.startsWith("http")) {
-                    workDetailVo.setAuthorAvatar(avatarKey);
-                } else {
-                    try {
-                        String signedUrl = storageService.getPreSignedUrl("avatars", avatarKey, 1, TimeUnit.HOURS);
-                        workDetailVo.setAuthorAvatar(signedUrl);
-                    } catch (Exception e) {
-                        workDetailVo.setAuthorAvatar(null);
-                    }
-                }
-            }
+            workDetailVo.setAuthorAvatar(processAvatarUrl(user.getAvatarUrl()));
         }
 
         // 获取统计数据
@@ -595,7 +528,29 @@ public class WorkServiceImpl implements WorkService {
             if (userId != null) {
                 workDetailVo.setIsLiked(checkUserAction(userId, workId, TargetType.LIKE));
                 workDetailVo.setIsCollected(checkUserAction(userId, workId, TargetType.COLLECT));
+                
+                // 检查是否已购买
+                if (workInfo.getAccessStrategy() == com.is.inspirationspaceclient.work.model.entity.enums.AccessStrategy.PAY) {
+                    // 作者本人视为已购买
+                    if (workInfo.getCreatorId().equals(userId)) {
+                        workDetailVo.setIsPurchased(true);
+                    } else {
+                        // 查询支付订单
+                        QueryWrapper<com.is.inspirationspaceclient.payment.model.entity.PayOrder> orderQuery = new QueryWrapper<>();
+                        orderQuery.eq("user_id", userId)
+                                .eq("product_id", workId)
+                                .eq("trade_status", com.is.inspirationspaceclient.payment.model.entity.enums.TradeStatus.PAY);
+                        Long count = payOrderMapper.selectCount(orderQuery);
+                        workDetailVo.setIsPurchased(count > 0);
+                    }
+                } else {
+                    // 免费作品视为已购买
+                    workDetailVo.setIsPurchased(true);
+                }
             }
+        } else if (workInfo.getAccessStrategy() != com.is.inspirationspaceclient.work.model.entity.enums.AccessStrategy.PAY) {
+            // 未登录但作品是免费的，视为已购买（可以下载）
+            workDetailVo.setIsPurchased(true);
         }
 
         return workDetailVo;
@@ -611,11 +566,7 @@ public class WorkServiceImpl implements WorkService {
      */
     @Override
     public Page<WorkSimpleVo> getUserWorks(Long userId, int page, int size) {
-        // 1. 获取当前登录用户ID（用于权限判断）
-        String auth = SecurityContextHolder.getContext().getAuthentication().getCredentials().toString();
-        Long currentUserId = JwtUtil.getUserIdFromToken(auth);
-
-        // 2. 构建查询条件
+        // 1. 构建查询条件
         QueryWrapper<WorkInfo> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("creator_id", userId)
                 .isNull("deleted_at") // 未删除的作品
@@ -630,7 +581,7 @@ public class WorkServiceImpl implements WorkService {
 
         // 4. 构建VO列表
         List<WorkSimpleVo> vos = workPage.getRecords().stream()
-                .map(work -> convertToSimpleVo(work, currentUserId))
+                .map(work -> convertToSimpleVo(work, userId))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
@@ -698,60 +649,11 @@ public class WorkServiceImpl implements WorkService {
         if (user != null) {
             vo.setAuthorId(user.getUserId());
             vo.setAuthorName(user.getUsername());
-            
-            // 处理作者头像 URL
-            String avatarKey = user.getAvatarUrl();
-            if (StringUtils.isNotBlank(avatarKey)) {
-                if (avatarKey.startsWith("http")) {
-                    vo.setAuthorAvatar(avatarKey);
-                } else {
-                    try {
-                        String signedUrl = storageService.getPreSignedUrl("avatars", avatarKey, 1, TimeUnit.HOURS);
-                        vo.setAuthorAvatar(signedUrl);
-                    } catch (Exception e) {
-                        log.error("生成作者头像预签名URL失败: {}", avatarKey, e);
-                        vo.setAuthorAvatar(null);
-                    }
-                }
-            }
+            vo.setAuthorAvatar(processAvatarUrl(user.getAvatarUrl()));
         }
 
         // 处理作品封面 URL
-        String coverKey = work.getCoverUrl();
-        if (StringUtils.isNotBlank(coverKey)) {
-            // 尝试提取 ObjectKey (如果数据库存的是完整URL)
-            String objectKey = coverKey;
-            if (coverKey.startsWith("http") && coverKey.contains("/work/")) {
-                try {
-                    int bucketIndex = coverKey.indexOf("/work/");
-                    String path = coverKey.substring(bucketIndex + "/work/".length());
-                    int queryIndex = path.indexOf("?");
-                    if (queryIndex != -1) {
-                        objectKey = path.substring(0, queryIndex);
-                    } else {
-                        objectKey = path;
-                    }
-                    // URL解码 (处理空格等特殊字符)
-                    objectKey = java.net.URLDecoder.decode(objectKey, java.nio.charset.StandardCharsets.UTF_8);
-                } catch (Exception e) {
-                    log.warn("尝试从URL提取Key失败: {}", coverKey);
-                }
-            }
-
-            if (!objectKey.startsWith("http")) {
-                // 如果是对象键，生成预签名URL
-                try {
-                    String signedUrl = storageService.getPreSignedUrl("work", objectKey, 1, TimeUnit.HOURS);
-                    vo.setCoverUrl(signedUrl);
-                } catch (Exception e) {
-                    log.error("生成作品封面预签名URL失败: {}", objectKey, e);
-                    vo.setCoverUrl(null);
-                }
-            } else {
-                // 无法提取Key或本来就是外部URL，直接透传
-                vo.setCoverUrl(coverKey);
-            }
-        }
+        vo.setCoverUrl(processCoverUrl(work.getCoverUrl()));
 
         // 获取统计数据
         WorkStats stats = workStateService.getWorkStats(work.getWorkId());
@@ -769,13 +671,29 @@ public class WorkServiceImpl implements WorkService {
             vo.setPurchaseCount(0);
         }
 
-        // 填充用户是否点赞/收藏状态
+        // 填充用户是否点赞/收藏/购买状态
         if (currentUserId != null) {
             vo.setIsLiked(checkUserAction(currentUserId, work.getWorkId(), TargetType.LIKE));
             vo.setIsCollected(checkUserAction(currentUserId, work.getWorkId(), TargetType.COLLECT));
+            
+            // 检查是否已购买
+            if (work.getAccessStrategy() == com.is.inspirationspaceclient.work.model.entity.enums.AccessStrategy.PAY) {
+                if (work.getCreatorId().equals(currentUserId)) {
+                    vo.setIsPurchased(true);
+                } else {
+                    QueryWrapper<com.is.inspirationspaceclient.payment.model.entity.PayOrder> orderQuery = new QueryWrapper<>();
+                    orderQuery.eq("user_id", currentUserId)
+                            .eq("product_id", work.getWorkId())
+                            .eq("trade_status", com.is.inspirationspaceclient.payment.model.entity.enums.TradeStatus.PAY);
+                    vo.setIsPurchased(payOrderMapper.selectCount(orderQuery) > 0);
+                }
+            } else {
+                vo.setIsPurchased(true);
+            }
         } else {
             vo.setIsLiked(false);
             vo.setIsCollected(false);
+            vo.setIsPurchased(work.getAccessStrategy() != com.is.inspirationspaceclient.work.model.entity.enums.AccessStrategy.PAY);
         }
 
         return vo;
@@ -822,10 +740,59 @@ public class WorkServiceImpl implements WorkService {
         String objectKey = "work-cover/work-cover_" + (workId != null ? workId : "unknown") + "_" + userId + "_" + System.currentTimeMillis() + "." + extension;
         storageService.upload(file, bucketName, objectKey);
 
-        // 5. 返回预签名URL（有效期5分钟）
+        // 5. 返回预签名URL（有效期1小时，给用户足够时间保存草稿）
         // 注意：前端拿到这个URL后预览，保存草稿时会将此URL传回。
         // createDraft/updateDraft 必须负责从URL中提取Key进行存储，否则URL过期后无法访问。
-        return storageService.getPreSignedUrl(bucketName, objectKey, 5, TimeUnit.MINUTES);
+        return storageService.getPreSignedUrl(bucketName, objectKey, 1, TimeUnit.HOURS);
+    }
+
+    /**
+     * 处理作品封面的预签名 URL
+     */
+    private String processCoverUrl(String coverKey) {
+        if (StringUtils.isBlank(coverKey)) return null;
+        
+        String objectKey = extractKeyFromUrl(coverKey);
+        // URL 解码处理特殊字符
+        try {
+            objectKey = java.net.URLDecoder.decode(objectKey, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            log.warn("封面Key解码失败: {}", objectKey);
+        }
+
+        if (!objectKey.startsWith("http")) {
+            try {
+                return storageService.getPreSignedUrl("work", objectKey, 1, TimeUnit.HOURS);
+            } catch (Exception e) {
+                log.error("生成作品封面预签名URL失败: {}", objectKey, e);
+                return null;
+            }
+        }
+        return objectKey;
+    }
+
+    /**
+     * 处理用户头像的预签名 URL
+     */
+    private String processAvatarUrl(String avatarKey) {
+        if (StringUtils.isBlank(avatarKey)) return null;
+
+        String objectKey = extractKeyFromUrl(avatarKey);
+        try {
+            objectKey = java.net.URLDecoder.decode(objectKey, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            log.warn("头像Key解码失败: {}", objectKey);
+        }
+
+        if (!objectKey.startsWith("http")) {
+            try {
+                return storageService.getPreSignedUrl("avatars", objectKey, 1, TimeUnit.HOURS);
+            } catch (Exception e) {
+                log.error("生成头像预签名URL失败: {}", objectKey, e);
+                return null;
+            }
+        }
+        return objectKey;
     }
 
     /**
@@ -837,15 +804,33 @@ public class WorkServiceImpl implements WorkService {
         if (!url.startsWith("http")) return url;
         
         try {
-            // 假设URL结构包含 /work/ (bucket name)
-            int bucketIndex = url.indexOf("/work/");
-            if (bucketIndex != -1) {
-                String path = url.substring(bucketIndex + "/work/".length());
-                int queryIndex = path.indexOf("?");
-                if (queryIndex != -1) {
-                    return path.substring(0, queryIndex);
+            // 支持多个 bucket，尝试匹配常见的 bucket 路径模式
+            // 模式：host:port/bucketName/objectKey...
+            String[] buckets = {"work", "avatars", "post-image"};
+            for (String bucket : buckets) {
+                String bucketPattern = "/" + bucket + "/";
+                int bucketIndex = url.indexOf(bucketPattern);
+                if (bucketIndex != -1) {
+                    String path = url.substring(bucketIndex + bucketPattern.length());
+                    int queryIndex = path.indexOf("?");
+                    if (queryIndex != -1) {
+                        return path.substring(0, queryIndex);
+                    }
+                    return path;
                 }
-                return path;
+            }
+            
+            // 如果没找到 bucket 模式，尝试寻找最后一个 / 之后的内容（最后的兜底逻辑）
+            // 注意：这可能不总是正确，但比直接返回全路径 URL 好，因为全路径 URL 肯定会过期
+            int lastSlashIndex = url.lastIndexOf("/");
+            if (lastSlashIndex != -1) {
+                String potentialKey = url.substring(lastSlashIndex + 1);
+                // 移除查询参数
+                int queryIndex = potentialKey.indexOf("?");
+                if (queryIndex != -1) {
+                    potentialKey = potentialKey.substring(0, queryIndex);
+                }
+                return potentialKey;
             }
         } catch (Exception e) {
             log.warn("解析封面URL失败: {}", url);

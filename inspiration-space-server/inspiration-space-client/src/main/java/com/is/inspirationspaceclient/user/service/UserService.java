@@ -60,8 +60,9 @@ public interface UserService {
 
     /**
      * 获取用户排行榜
+     *
      * @param topN 前N名
      * @return 用户列表
      */
-    List<UserVo> getUserRanking(int topN);
+    List<UserRankVo> getUserRanking(int topN);
 }

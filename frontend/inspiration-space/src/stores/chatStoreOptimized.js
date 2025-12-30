@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { chatService, ChatWebSocket } from '@/services/chatService'
 import { ElMessage } from 'element-plus'
 
@@ -14,13 +14,13 @@ export const useChatStore = defineStore('chat', () => {
   const currentSession = ref(null)
   
   // 会话成员映射 (sessionId -> members[])
-  const sessionMembers = ref(new Map())
+  const sessionMembers = reactive(new Map())
   
   // 会话消息映射 (sessionId -> messages[])
-  const sessionMessages = ref(new Map())
+  const sessionMessages = reactive(new Map())
   
   // 消息分页信息映射 (sessionId -> {page, size, total, hasMore})
-  const messagePagination = ref(new Map())
+  const messagePagination = reactive(new Map())
   
   // WebSocket连接
   const websocket = ref(null)
@@ -32,7 +32,7 @@ export const useChatStore = defineStore('chat', () => {
   const totalUnreadCount = ref(0)
   
   // 用户在线状态映射 (userId -> isOnline)
-  const userOnlineStatus = ref(new Map())
+  const userOnlineStatus = reactive(new Map())
   
   // 正在加载的状态
   const loading = ref({
@@ -44,9 +44,14 @@ export const useChatStore = defineStore('chat', () => {
 
   // ========== 计算属性 ==========
   
-  // 排序后的会话列表（按最后消息时间倒序）
+  // 排序后的会话列表（按置顶和最后消息时间排序）
   const sortedSessions = computed(() => {
     return [...sessions.value].sort((a, b) => {
+      // 置顶的在前
+      if (a.isPinned && !b.isPinned) return -1
+      if (!a.isPinned && b.isPinned) return 1
+      
+      // 然后按时间倒序
       const timeA = new Date(a.lastMessageTime || a.updatedAt || 0).getTime()
       const timeB = new Date(b.lastMessageTime || b.updatedAt || 0).getTime()
       return timeB - timeA // 最新的在前
@@ -66,13 +71,13 @@ export const useChatStore = defineStore('chat', () => {
   // 当前会话的消息列表
   const currentMessages = computed(() => {
     if (!currentSession.value) return []
-    return sessionMessages.value.get(currentSession.value.sessionId) || []
+    return sessionMessages.get(currentSession.value.sessionId) || []
   })
   
   // 当前会话的成员列表
   const currentSessionMembers = computed(() => {
     if (!currentSession.value) return []
-    return sessionMembers.value.get(currentSession.value.sessionId) || []
+    return sessionMembers.get(currentSession.value.sessionId) || []
   })
   
   // 当前会话的未读消息数
@@ -83,13 +88,20 @@ export const useChatStore = defineStore('chat', () => {
   
   // 当前用户ID
   const currentUserId = computed(() => {
-    return localStorage.getItem('userId') ? parseInt(localStorage.getItem('userId')) : null
+    return localStorage.getItem('userId') || null
   })
   
   // 当前用户是否为群主
   const isCurrentUserGroupOwner = computed(() => {
     if (!currentSession.value || currentSession.value.sessionType !== 'GROUP') return false
-    return currentSession.value.createdBy === currentUserId.value
+    return String(currentSession.value.createdBy) === String(currentUserId.value)
+  })
+
+  // 当前用户是否为管理员
+  const isCurrentUserGroupAdmin = computed(() => {
+    if (!currentSession.value || currentSession.value.sessionType !== 'GROUP') return false
+    const member = currentSessionMembers.value.find(m => String(m.userId) === String(currentUserId.value))
+    return member?.role === 'ADMIN' || member?.role === 'OWNER'
   })
 
   // ========== 核心方法 ==========
@@ -111,6 +123,7 @@ export const useChatStore = defineStore('chat', () => {
       websocket.value.onMessage('READ_RECEIPT', handleReadReceipt)
       websocket.value.onMessage('MESSAGE_RECALL', handleMessageRecall)
       websocket.value.onMessage('GROUP_JOIN', handleGroupJoin)
+      websocket.value.onMessage('SESSION_CREATED', () => loadSessions())
       websocket.value.onMessage('GROUP_LEAVE', handleGroupLeave)
       websocket.value.onMessage('GROUP_DISSOLVE', handleGroupDissolve)
       websocket.value.onMessage('GROUP_NOTICE', handleGroupNotice)
@@ -138,6 +151,8 @@ export const useChatStore = defineStore('chat', () => {
       
       // 严格按照后端返回的数据结构
       if (response && Array.isArray(response)) {
+        const pinnedSessions = JSON.parse(localStorage.getItem('pinnedSessions') || '[]')
+        
         sessions.value = response.map(session => ({
           sessionId: session.sessionId,
           sessionName: session.sessionName,
@@ -154,7 +169,8 @@ export const useChatStore = defineStore('chat', () => {
           lastMessageTime: session.lastMessageTime,
           lastMessageType: session.lastMessageType || 'TEXT',
           unreadCount: session.unreadCount || 0,
-          isOnline: session.isOnline || false
+          isOnline: session.isOnline || false,
+          isPinned: pinnedSessions.includes(session.sessionId)
         }))
         
         // 计算总未读数
@@ -183,17 +199,35 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
     
+    // 如果点击的是当前已选中的会话，且已经有消息，则不再重复加载
+    if (currentSession.value && currentSession.value.sessionId === session.sessionId) {
+      if (sessionMessages.has(session.sessionId) && sessionMessages.get(session.sessionId).length > 0) {
+        return
+      }
+    }
+
     currentSession.value = session
     
-    // 并行加载消息和成员
-    await Promise.all([
-      loadSessionMessages(session.sessionId),
-      loadSessionMembers(session.sessionId)
-    ])
+    // 立即设置加载状态，防止显示旧数据
+    loading.value.messages = true
+    loading.value.members = true
     
-    // 清空未读消息
-    if (session.unreadCount > 0) {
-      await markSessionAsRead(session.sessionId)
+    // 并行加载消息和成员
+    try {
+      await Promise.all([
+        loadSessionMessages(session.sessionId),
+        loadSessionMembers(session.sessionId)
+      ])
+      
+      // 清空未读消息
+      if (session.unreadCount > 0) {
+        await markSessionAsRead(session.sessionId)
+      }
+    } catch (error) {
+      console.error('选择会话加载数据失败:', error)
+    } finally {
+      loading.value.messages = false
+      loading.value.members = false
     }
   }
   
@@ -206,21 +240,21 @@ export const useChatStore = defineStore('chat', () => {
       const response = await chatService.getGroupMembers(sessionId)
       
       if (response && Array.isArray(response)) {
-        sessionMembers.value.set(sessionId, response.map(member => ({
+        sessionMembers.set(sessionId, response.map(member => ({
           userId: member.userId,
           userName: member.userName,
-          userAvatar: member.userAvatar,
+          avatar: member.avatar,
           role: member.role, // NORMAL, ADMIN, OWNER
           joinedAt: member.joinedAt,
           isOnline: member.isOnline || false
         })))
       } else {
-        sessionMembers.value.set(sessionId, [])
+        sessionMembers.set(sessionId, [])
       }
       
     } catch (error) {
       console.error('加载会话成员失败:', error)
-      sessionMembers.value.set(sessionId, [])
+      sessionMembers.set(sessionId, [])
     } finally {
       loading.value.members = false
     }
@@ -234,8 +268,24 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const response = await chatService.getChatMessages(sessionId, page, size)
       
-      if (response && response.records) {
-        const messages = response.records.map(msg => ({
+      // 后端直接返回 List<ChatMessage> 或者是包含 records 的分页对象
+      let messagesData = []
+      let total = 0
+      let current = page
+      let pageSize = size
+
+      if (Array.isArray(response)) {
+        messagesData = response
+        total = response.length // 如果是 List，total 就是长度
+      } else if (response && response.records) {
+        messagesData = response.records
+        total = response.total || 0
+        current = response.current || page
+        pageSize = response.size || size
+      }
+
+      if (messagesData.length > 0 || page === 1) {
+        const messages = messagesData.map(msg => ({
           messageId: msg.messageId,
           sessionId: msg.sessionId,
           senderId: msg.senderId,
@@ -253,31 +303,33 @@ export const useChatStore = defineStore('chat', () => {
           senderAvatar: msg.senderAvatar
         }))
         
-        // 初始化消息映射
-        if (!sessionMessages.value.has(sessionId)) {
-          sessionMessages.value.set(sessionId, [])
-        }
-        
-        // 更新分页信息
-        messagePagination.value.set(sessionId, {
-          page: response.current || page,
-          size: response.size || size,
-          total: response.total || 0,
-          hasMore: (response.current * response.size) < response.total
-        })
-        
-        const existingMessages = sessionMessages.value.get(sessionId)
-        if (page === 1) {
-          // 第一页，替换所有消息
-          sessionMessages.value.set(sessionId, messages)
-        } else {
-          // 后续页，追加到前面（历史消息）
-          sessionMessages.value.set(sessionId, [...messages, ...existingMessages])
-        }
+      // 初始化消息映射
+      if (!sessionMessages.has(sessionId)) {
+        sessionMessages.set(sessionId, [])
+      }
+      
+      // 更新分页信息
+      messagePagination.set(sessionId, {
+        page: current,
+        size: pageSize,
+        total: total,
+        hasMore: Array.isArray(response) ? false : (current * pageSize) < total
+      })
+      
+      const existingMessages = sessionMessages.get(sessionId)
+      if (page === 1) {
+        // 第一页，替换所有消息
+        sessionMessages.set(sessionId, messages)
+      } else {
+        // 后续页，追加到前面（历史消息）
+        sessionMessages.set(sessionId, [...messages, ...existingMessages])
+      }
         
       } else {
-        sessionMessages.value.set(sessionId, [])
-        messagePagination.value.set(sessionId, {
+        if (page === 1) {
+          sessionMessages.set(sessionId, [])
+        }
+        messagePagination.set(sessionId, {
           page: 1,
           size: size,
           total: 0,
@@ -290,8 +342,8 @@ export const useChatStore = defineStore('chat', () => {
       ElMessage.error('加载消息失败')
       
       // 确保有默认值
-      if (!sessionMessages.value.has(sessionId)) {
-        sessionMessages.value.set(sessionId, [])
+      if (!sessionMessages.has(sessionId)) {
+        sessionMessages.set(sessionId, [])
       }
     } finally {
       loading.value.messages = false
@@ -303,7 +355,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!currentSession.value) return
     
     const sessionId = currentSession.value.sessionId
-    const pagination = messagePagination.value.get(sessionId)
+    const pagination = messagePagination.get(sessionId)
     
     if (!pagination || !pagination.hasMore) return
     
@@ -347,10 +399,10 @@ export const useChatStore = defineStore('chat', () => {
       }
       
       // 添加到本地消息列表
-      if (!sessionMessages.value.has(currentSession.value.sessionId)) {
-        sessionMessages.value.set(currentSession.value.sessionId, [])
+      if (!sessionMessages.has(currentSession.value.sessionId)) {
+        sessionMessages.set(currentSession.value.sessionId, [])
       }
-      const messages = sessionMessages.value.get(currentSession.value.sessionId)
+      const messages = sessionMessages.get(currentSession.value.sessionId)
       messages.push(localMessage)
       
       // 发送到服务器
@@ -389,7 +441,7 @@ export const useChatStore = defineStore('chat', () => {
       ElMessage.error('发送消息失败')
       
       // 标记消息为失败
-      const messages = sessionMessages.value.get(currentSession.value.sessionId) || []
+      const messages = sessionMessages.get(currentSession.value.sessionId) || []
       const failedMessage = messages.find(msg => msg.localStatus === 'SENDING')
       if (failedMessage) {
         failedMessage.localStatus = 'FAILED'
@@ -427,20 +479,18 @@ export const useChatStore = defineStore('chat', () => {
     if (!sessionId) return
     
     try {
-      // 获取该会话的所有未读消息
-      const messages = sessionMessages.value.get(sessionId) || []
-      const unreadMessages = messages.filter(msg => 
-        msg.senderId !== currentUserId.value && 
-        msg.status === 'DELIVERED' && 
-        !msg.isRead
-      )
+      // 调用后端会话级别标记已读接口
+      await chatService.markSessionAsRead(sessionId)
       
-      if (unreadMessages.length === 0) return
-      
-      // 批量标记已读
-      for (const message of unreadMessages) {
-        await markAsRead(message.messageId)
-      }
+      // 更新本地消息状态
+      const messages = sessionMessages.get(sessionId) || []
+      messages.forEach(msg => {
+        if (String(msg.senderId) !== String(currentUserId.value) && 
+            (msg.status === 'DELIVERED' || msg.status === 'SENT')) {
+          msg.isRead = true
+          msg.status = 'READ'
+        }
+      })
       
       // 更新会话未读数
       const session = sessions.value.find(s => s.sessionId === sessionId)
@@ -450,25 +500,31 @@ export const useChatStore = defineStore('chat', () => {
         totalUnreadCount.value = Math.max(0, totalUnreadCount.value - previousUnreadCount)
       }
       
+      // 发送 WebSocket 已读回执（可选，如果后端已经处理了广播则不需要）
+      // 这里可以根据实际需要决定是否保留单条消息的已读回执逻辑
+      
     } catch (error) {
       console.error('标记会话已读失败:', error)
     }
   }
   
   // 标记消息已读
-  const markAsRead = async (messageId) => {
+  const markAsRead = async (messageId, sessionId = null) => {
     if (!messageId) return
     
     try {
       await chatService.markMessageAsRead(messageId)
       
+      // 确定要更新的 sessionId
+      const targetSessionId = sessionId || (currentSession.value ? currentSession.value.sessionId : null)
+      
       // 更新本地消息状态
-      if (currentSession.value) {
-        const messages = sessionMessages.value.get(currentSession.value.sessionId) || []
+      if (targetSessionId) {
+        const messages = sessionMessages.get(targetSessionId) || []
         const message = messages.find(msg => msg.messageId === messageId)
         if (message) {
           message.isRead = true
-          message.status = 'DELIVERED'
+          message.status = 'READ'
         }
       }
       
@@ -476,7 +532,8 @@ export const useChatStore = defineStore('chat', () => {
       if (websocket.value && websocket.value.isConnected()) {
         websocket.value.sendMessage({
           type: 'READ_RECEIPT',
-          messageId: messageId
+          messageId: messageId,
+          sessionId: targetSessionId
         })
       }
       
@@ -486,15 +543,18 @@ export const useChatStore = defineStore('chat', () => {
   }
   
   // 撤回消息
-  const recallMessage = async (messageId) => {
+  const recallMessage = async (messageId, sessionId = null) => {
     if (!messageId) return
     
     try {
       await chatService.recallMessage(messageId)
       
+      // 确定要更新的 sessionId
+      const targetSessionId = sessionId || (currentSession.value ? currentSession.value.sessionId : null)
+      
       // 更新本地消息状态
-      if (currentSession.value) {
-        const messages = sessionMessages.value.get(currentSession.value.sessionId) || []
+      if (targetSessionId) {
+        const messages = sessionMessages.get(targetSessionId) || []
         const message = messages.find(msg => msg.messageId === messageId)
         if (message) {
           message.msgType = 'RECALL'
@@ -538,13 +598,20 @@ export const useChatStore = defineStore('chat', () => {
   
   // 创建群聊
   const createGroupChat = async (groupData) => {
-    if (!groupData || !groupData.name) {
+    if (!groupData || !groupData.groupName) {
       ElMessage.error('群聊名称不能为空')
       return null
     }
     
     try {
-      const sessionId = await chatService.createGroupChat(groupData)
+      // 映射字段以符合后端 DTO
+      const requestDto = {
+        groupName: groupData.groupName,
+        description: groupData.description,
+        requiredApproval: groupData.requiredApproval
+      }
+      
+      const sessionId = await chatService.createGroupChat(requestDto)
       
       // 重新加载会话列表
       await loadSessions()
@@ -603,9 +670,9 @@ export const useChatStore = defineStore('chat', () => {
         }
         
         // 清空相关缓存
-        sessionMessages.value.delete(sessionId)
-        sessionMembers.value.delete(sessionId)
-        messagePagination.value.delete(sessionId)
+        sessionMessages.delete(sessionId)
+        sessionMembers.delete(sessionId)
+        messagePagination.delete(sessionId)
         
         // 如果当前会话就是这个，清空当前会话
         if (currentSession.value && currentSession.value.sessionId === sessionId) {
@@ -638,9 +705,9 @@ export const useChatStore = defineStore('chat', () => {
         }
         
         // 清空相关缓存
-        sessionMessages.value.delete(sessionId)
-        sessionMembers.value.delete(sessionId)
-        messagePagination.value.delete(sessionId)
+        sessionMessages.delete(sessionId)
+        sessionMembers.delete(sessionId)
+        messagePagination.delete(sessionId)
         
         // 如果当前会话就是这个，清空当前会话
         if (currentSession.value && currentSession.value.sessionId === sessionId) {
@@ -654,6 +721,79 @@ export const useChatStore = defineStore('chat', () => {
       console.error('解散群聊失败:', error)
       ElMessage.error('解散群聊失败')
       return false
+    }
+  }
+
+  // 置顶/取消置顶会话
+  const pinSession = (sessionId) => {
+    const session = sessions.value.find(s => s.sessionId === sessionId)
+    if (session) {
+      session.isPinned = !session.isPinned
+      // 这里可以考虑存入 localStorage 保持持久化
+      const pinnedSessions = JSON.parse(localStorage.getItem('pinnedSessions') || '[]')
+      if (session.isPinned) {
+        if (!pinnedSessions.includes(sessionId)) {
+          pinnedSessions.push(sessionId)
+        }
+      } else {
+        const index = pinnedSessions.indexOf(sessionId)
+        if (index !== -1) {
+          pinnedSessions.splice(index, 1)
+        }
+      }
+      localStorage.setItem('pinnedSessions', JSON.stringify(pinnedSessions))
+      ElMessage.success(session.isPinned ? '已置顶' : '已取消置顶')
+    }
+  }
+
+  // 删除会话
+  const deleteSession = async (sessionId) => {
+    if (!sessionId) return false
+    
+    try {
+      await chatService.deleteChatSession(sessionId)
+      
+      // 从列表中移除
+      const index = sessions.value.findIndex(s => s.sessionId === sessionId)
+      if (index !== -1) {
+        sessions.value.splice(index, 1)
+      }
+      
+      // 清空相关缓存
+      sessionMessages.delete(sessionId)
+      sessionMembers.delete(sessionId)
+      messagePagination.delete(sessionId)
+      
+      // 如果当前会话就是这个，清空当前会话
+      if (currentSession.value && currentSession.value.sessionId === sessionId) {
+        currentSession.value = null
+      }
+      
+      ElMessage.success('会话已删除')
+      return true
+    } catch (error) {
+      console.error('删除会话失败:', error)
+      ElMessage.error('删除会话失败')
+      return false
+    }
+  }
+
+  // 踢出群成员
+  const kickFromGroup = async (sessionId, userIds) => {
+    if (!sessionId || !userIds || userIds.length === 0) return false
+    
+    try {
+      await chatService.kickGroupMember(sessionId, userIds)
+      
+      // 踢人后，更新本地成员列表
+      const members = sessionMembers.get(sessionId) || []
+      const remainingMembers = members.filter(m => !userIds.includes(m.userId))
+      sessionMembers.set(sessionId, remainingMembers)
+      
+      return true
+    } catch (error) {
+      console.error('踢出成员失败:', error)
+      throw error
     }
   }
 
@@ -674,6 +814,99 @@ export const useChatStore = defineStore('chat', () => {
     } catch (error) {
       console.error('踢出成员失败:', error)
       ElMessage.error('踢出成员失败')
+      return false
+    }
+  }
+
+  // 获取群成员
+  const getGroupMembers = async (sessionId) => {
+    try {
+      return await chatService.getGroupMembers(sessionId)
+    } catch (error) {
+      console.error('获取群成员失败:', error)
+      return []
+    }
+  }
+
+  // 获取群详情
+  const getGroupInfo = async (sessionId) => {
+    try {
+      return await chatService.getGroupInfo(sessionId)
+    } catch (error) {
+      console.error('获取群信息失败:', error)
+      return null
+    }
+  }
+
+  // 邀请用户进群
+  const inviteToGroup = async (sessionId, userIds) => {
+    if (!sessionId || !userIds || userIds.length === 0) return false
+    
+    try {
+      const result = await chatService.inviteToGroup(sessionId, userIds)
+      if (result) {
+        await loadSessionMembers(sessionId)
+        ElMessage.success('邀请成功')
+      }
+      return result
+    } catch (error) {
+      console.error('邀请失败:', error)
+      ElMessage.error('邀请失败')
+      return false
+    }
+  }
+
+  // 上传群头像
+  const uploadGroupAvatar = async (sessionId, avatarFile) => {
+    if (!sessionId || !avatarFile) return null
+    try {
+      const url = await chatService.uploadGroupAvatar(sessionId, avatarFile)
+      if (url) {
+        // 更新本地会话列表中的头像
+        const session = sessions.value.find(s => s.sessionId === sessionId)
+        if (session) {
+          session.sessionAvatar = url
+        }
+        if (currentSession.value && currentSession.value.sessionId === sessionId) {
+          currentSession.value.sessionAvatar = url
+        }
+      }
+      return url
+    } catch (error) {
+      console.error('上传群头像失败:', error)
+      ElMessage.error('上传群头像失败')
+      return null
+    }
+  }
+
+  // 修改群信息
+  const updateGroupInfo = async (sessionId, groupData) => {
+    if (!sessionId) return false
+    
+    try {
+      const result = await chatService.updateGroupInfo(sessionId, {
+        groupName: groupData.groupName,
+        description: groupData.description,
+        requiredApproval: groupData.requiredApproval === 0 ? 'NEED_APPROVAL' : 'NEED_NOT_APPROVAL'
+      })
+      if (result) {
+        // 更新会话列表中的信息
+        const session = sessions.value.find(s => s.sessionId === sessionId)
+        if (session) {
+          session.sessionName = groupData.groupName
+          session.description = groupData.description
+        }
+        // 如果当前会话是这一个，也更新
+        if (currentSession.value && currentSession.value.sessionId === sessionId) {
+          currentSession.value.sessionName = groupData.groupName
+          currentSession.value.description = groupData.description
+        }
+        ElMessage.success('群信息更新成功')
+      }
+      return result
+    } catch (error) {
+      console.error('更新群信息失败:', error)
+      ElMessage.error('更新群信息失败')
       return false
     }
   }
@@ -726,10 +959,10 @@ export const useChatStore = defineStore('chat', () => {
             sentAt: new Date().toISOString()
           }
           
-          if (!sessionMessages.value.has(sessionId)) {
-            sessionMessages.value.set(sessionId, [])
+          if (!sessionMessages.has(sessionId)) {
+            sessionMessages.set(sessionId, [])
           }
-          const messages = sessionMessages.value.get(sessionId)
+          const messages = sessionMessages.get(sessionId)
           messages.push(noticeMessage)
         }
       }
@@ -769,14 +1002,14 @@ export const useChatStore = defineStore('chat', () => {
     
     // 如果当前会话就是消息所属的会话，添加到消息列表
     if (currentSession.value && currentSession.value.sessionId === sessionId) {
-      if (!sessionMessages.value.has(sessionId)) {
-        sessionMessages.value.set(sessionId, [])
+      if (!sessionMessages.has(sessionId)) {
+        sessionMessages.set(sessionId, [])
       }
-      const messages = sessionMessages.value.get(sessionId)
+      const messages = sessionMessages.get(sessionId)
       messages.push(normalizedMessage)
       
       // 自动标记已读（因为是当前会话）
-      if (normalizedMessage.senderId !== currentUserId.value) {
+      if (String(normalizedMessage.senderId) !== String(currentUserId.value)) {
         markAsRead(normalizedMessage.messageId)
       }
     } else {
@@ -787,7 +1020,12 @@ export const useChatStore = defineStore('chat', () => {
         totalUnreadCount.value++
         
         // 播放提示音或显示通知
-        playMessageSound()
+        if (typeof playMessageSound === 'function') {
+          playMessageSound()
+        }
+      } else {
+        // 如果会话列表中没有这个会话，可能是一个新会话（例如刚被拉入群），需要重新加载
+        loadSessions()
       }
     }
     
@@ -805,12 +1043,12 @@ export const useChatStore = defineStore('chat', () => {
     const { messageId, sessionId } = message
     
     // 更新消息状态为已读
-    if (sessionMessages.value.has(sessionId)) {
-      const messages = sessionMessages.value.get(sessionId)
+    if (sessionMessages.has(sessionId)) {
+      const messages = sessionMessages.get(sessionId)
       const msg = messages.find(m => m.messageId === messageId)
       if (msg) {
         msg.isRead = true
-        msg.status = 'DELIVERED'
+        msg.status = 'READ'
       }
     }
   }
@@ -819,8 +1057,8 @@ export const useChatStore = defineStore('chat', () => {
   const handleMessageRecall = (message) => {
     const { messageId, sessionId } = message
     
-    if (sessionMessages.value.has(sessionId)) {
-      const messages = sessionMessages.value.get(sessionId)
+    if (sessionMessages.has(sessionId)) {
+      const messages = sessionMessages.get(sessionId)
       const msg = messages.find(m => m.messageId === messageId)
       if (msg) {
         msg.msgType = 'RECALL'
@@ -840,20 +1078,21 @@ export const useChatStore = defineStore('chat', () => {
         messageId: Date.now(),
         sessionId: sessionId,
         senderId: 0, // 系统消息
-        content: `${userName} 加入了群聊`,
+        content: `${userName || '新成员'} 加入了群聊`,
         msgType: 'SYSTEM',
         sentAt: new Date().toISOString()
       }
       
-      if (!sessionMessages.value.has(sessionId)) {
-        sessionMessages.value.set(sessionId, [])
+      if (!sessionMessages.has(sessionId)) {
+        sessionMessages.set(sessionId, [])
       }
-      const messages = sessionMessages.value.get(sessionId)
+      const messages = sessionMessages.get(sessionId)
       messages.push(joinMessage)
     }
     
-    // 重新加载成员列表
+    // 重新加载成员列表和会话列表
     loadSessionMembers(sessionId)
+    loadSessions()
   }
   
   // 处理群成员离开
@@ -871,15 +1110,16 @@ export const useChatStore = defineStore('chat', () => {
         sentAt: new Date().toISOString()
       }
       
-      if (!sessionMessages.value.has(sessionId)) {
-        sessionMessages.value.set(sessionId, [])
+      if (!sessionMessages.has(sessionId)) {
+        sessionMessages.set(sessionId, [])
       }
-      const messages = sessionMessages.value.get(sessionId)
+      const messages = sessionMessages.get(sessionId)
       messages.push(leaveMessage)
     }
     
-    // 重新加载成员列表
+    // 重新加载成员列表和会话列表
     loadSessionMembers(sessionId)
+    loadSessions()
   }
   
   // 处理群解散
@@ -893,9 +1133,9 @@ export const useChatStore = defineStore('chat', () => {
     }
     
     // 清空相关缓存
-    sessionMessages.value.delete(sessionId)
-    sessionMembers.value.delete(sessionId)
-    messagePagination.value.delete(sessionId)
+    sessionMessages.delete(sessionId)
+    sessionMembers.delete(sessionId)
+    messagePagination.delete(sessionId)
     
     // 如果当前会话就是这个，清空当前会话
     if (currentSession.value && currentSession.value.sessionId === sessionId) {
@@ -907,30 +1147,48 @@ export const useChatStore = defineStore('chat', () => {
   // 处理群公告
   const handleGroupNotice = (message) => {
     const { sessionId, notice } = message
+    const content = `群公告: ${notice}`
+    const sentAt = new Date().toISOString()
     
-    // 显示系统消息
+    // 如果当前会话就是消息所属的会话，添加到消息列表
     if (currentSession.value && currentSession.value.sessionId === sessionId) {
       const noticeMessage = {
         messageId: Date.now(),
         sessionId: sessionId,
         senderId: 0, // 系统消息
-        content: `群公告: ${notice}`,
+        content: content,
         msgType: 'GROUP_NOTICE',
-        sentAt: new Date().toISOString()
+        sentAt: sentAt
       }
       
-      if (!sessionMessages.value.has(sessionId)) {
-        sessionMessages.value.set(sessionId, [])
+      if (!sessionMessages.has(sessionId)) {
+        sessionMessages.set(sessionId, [])
       }
-      const messages = sessionMessages.value.get(sessionId)
+      const messages = sessionMessages.get(sessionId)
       messages.push(noticeMessage)
+    } else {
+      // 否则增加未读计数
+      const session = sessions.value.find(s => s.sessionId === sessionId)
+      if (session) {
+        session.unreadCount = (session.unreadCount || 0) + 1
+        totalUnreadCount.value++
+        playMessageSound()
+      }
+    }
+    
+    // 更新会话的最后消息信息
+    const session = sessions.value.find(s => s.sessionId === sessionId)
+    if (session) {
+      session.lastMessage = content
+      session.lastMessageTime = sentAt
+      session.lastMessageType = 'GROUP_NOTICE'
     }
   }
   
   // 处理用户上线
   const handleUserOnline = (message) => {
     const { userId } = message
-    userOnlineStatus.value.set(userId, true)
+    userOnlineStatus.set(userId, true)
     
     // 更新会话中的在线状态
     sessions.value.forEach(session => {
@@ -944,7 +1202,7 @@ export const useChatStore = defineStore('chat', () => {
   // 处理用户下线
   const handleUserOffline = (message) => {
     const { userId } = message
-    userOnlineStatus.value.set(userId, false)
+    userOnlineStatus.set(userId, false)
     
     // 更新会话中的在线状态
     sessions.value.forEach(session => {
@@ -995,14 +1253,14 @@ export const useChatStore = defineStore('chat', () => {
     return roleMap[role] || '成员'
   }
   
-  // 清理状态
+  // 清空状态
   const clearState = () => {
     sessions.value = []
     currentSession.value = null
-    sessionMembers.value.clear()
-    sessionMessages.value.clear()
-    messagePagination.value.clear()
-    userOnlineStatus.value.clear()
+    sessionMembers.clear()
+    sessionMessages.clear()
+    messagePagination.clear()
+    userOnlineStatus.clear()
     totalUnreadCount.value = 0
     connectionStatus.value = 'disconnected'
     
@@ -1033,6 +1291,7 @@ export const useChatStore = defineStore('chat', () => {
     currentSessionUnreadCount,
     currentUserId,
     isCurrentUserGroupOwner,
+    isCurrentUserGroupAdmin,
     
     // 核心方法
     initializeWebSocket,
@@ -1041,6 +1300,8 @@ export const useChatStore = defineStore('chat', () => {
     loadSessionMessages,
     loadMoreMessages,
     loadSessionMembers,
+    getGroupMembers,
+    getGroupInfo,
     sendMessage,
     uploadFileAndGetInfo,
     markAsRead,
@@ -1051,9 +1312,15 @@ export const useChatStore = defineStore('chat', () => {
     leaveGroupChat,
     dissolveGroupChat,
     kickGroupMember,
+    kickFromGroup,
+    inviteToGroup,
+    updateGroupInfo,
+    uploadGroupAvatar,
     transferGroupOwner,
     publishGroupNotice,
     markSessionAsRead,
+    pinSession,
+    deleteSession,
     
     // 工具方法
     getSessionTypeText,

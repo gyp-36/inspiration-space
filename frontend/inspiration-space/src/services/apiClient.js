@@ -1,4 +1,5 @@
 import router from '@/router';
+import { ElMessage } from 'element-plus';
 
 
 
@@ -234,19 +235,21 @@ export const privateApiCall = async (endpoint, method = 'GET', body = null) => {
     // 6. 增强router校验（避免未定义报错）
     if (error instanceof ApiError && error.isAuthError()) {
       localStorage.removeItem('token');
-      // 先判断router是否存在（避免未引入时报错）
-      const router = window.router || (typeof $router !== 'undefined' ? $router : null);
+      // 使用导入的 router 实例
       if (router) {
         setTimeout(async () => {
-          if (router.currentRoute?.path !== '/login') {
-            await router.push('/login').catch(err => {
+          // 如果已经在首页，则不需要跳转
+          if (router.currentRoute?.value?.path !== '/') {
+            await router.push('/').catch(err => {
               console.warn('路由跳转失败：', err);
-              window.location.href = '/login';
+              window.location.href = '/';
             });
           }
+          // 提示用户登录失效
+          ElMessage.warning('登录已失效，请重新登录');
         }, 0);
       } else {
-        window.location.href = '/login';
+        window.location.href = '/';
       }
     }
 

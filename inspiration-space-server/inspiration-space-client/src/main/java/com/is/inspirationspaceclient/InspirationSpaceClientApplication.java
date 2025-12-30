@@ -10,14 +10,13 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 @ComponentScan({
         "com.is.inspirationspaceclient",
-        "com.is.inspirationspacecommon"
+        "com.is.inspirationspacecommon",
+        "com.is.inspirationspaceadmin"
 })
-@MapperScan({"com.is.inspirationspaceclient.forum.mapper",
-        "com.is.inspirationspaceclient.user.mapper",
-        "com.is.inspirationspaceclient.chat.mapper",
-        "com.is.inspirationspaceclient.work.mapper",
-        "com.is.inspirationspaceclient.payment.mapper",
-        "com.is.inspirationspaceclient.notification.mapper"
+@MapperScan({
+        "com.is.inspirationspaceclient.**.mapper",
+        "com.is.inspirationspacecommon.**.mapper",
+        "com.is.inspirationspaceadmin.**.mapper"
 })
 
 public class InspirationSpaceClientApplication {

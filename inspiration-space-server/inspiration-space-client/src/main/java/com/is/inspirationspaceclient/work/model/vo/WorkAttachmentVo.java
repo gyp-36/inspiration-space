@@ -27,6 +27,9 @@ public class WorkAttachmentVo implements Serializable {
     @Schema(name = "file_extension", type = "String", description = "文件扩展名")
     private String fileExtension;
 
+    @Schema(name = "download_url", type = "String", description = "下载链接")
+    private String downloadUrl;
+
 
 
 }

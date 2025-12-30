@@ -8,5 +8,5 @@ public interface PayTransactionService {
 
     Boolean cancelPay(String token, Long tractionId);
 
-    Boolean updatePayStatus(String tradeNo);
+    Boolean updatePayStatus(String transactionNo);
 }

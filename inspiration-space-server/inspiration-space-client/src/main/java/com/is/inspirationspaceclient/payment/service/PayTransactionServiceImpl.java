@@ -56,12 +56,14 @@ public class PayTransactionServiceImpl implements PayTransactionService{
         //2.生成支付订单
         PayTransaction payTransaction = new PayTransaction();
         payTransaction.setTransactionId(snowflakeIdGenerator.nextId());
+        payTransaction.setDraftId(draftId);
         payTransaction.setOrderId(snowflakeIdGenerator.nextId());
         payTransaction.setBuyerId(userId);
         payTransaction.setTransactionNo(generateOrderNo(userId));
         payTransaction.setPaymentMethod(paymentDto.getPaymentMethod());
         payTransaction.setAmount(paymentDto.getAmount());
-        payTransaction.setStatus(PayStatus.UNPAID);
+        payTransaction.setStatus(PayStatus.UNPAY);
+        payTransaction.setTradeNo(String.valueOf((snowflakeIdGenerator.nextId()))); // 支付完成前，第三方交易号为空
 
         //3.保存支付订单
         payTransactionMapper.insert(payTransaction);
@@ -75,20 +77,20 @@ public class PayTransactionServiceImpl implements PayTransactionService{
     }
 
     @Override
-    public Boolean updatePayStatus(String tradeNo) {
+    public Boolean updatePayStatus(String transactionNo) {
         //1.查询支付订单
-        PayTransaction payTransaction = payTransactionMapper.selectByTradeNo(tradeNo);
+        PayTransaction payTransaction = payTransactionMapper.selectByTransactionNo(transactionNo);
         if (payTransaction == null) {
+            log.error("支付状态更新失败：找不到单号为 {} 的支付订单", transactionNo);
             throw new IsServiceException(ErrorCode.PAYMENT_NOT_FOUND.getHttpStatusCode(), "支付订单不存在");
         }
 
         //2.更新状态
         payTransaction.setStatus(PayStatus.SUCCESS);
-        payTransaction.setTransactionNo(tradeNo);
+        // 注意：这里 transactionNo 是我们的内部单号，第三方流水号如果需要记录，应该从回调参数中获取并设置到 tradeNo 字段
         payTransaction.setPayTime(LocalDateTime.now());
 
         return payTransactionMapper.updateById(payTransaction)>0;
-
     }
 
     private String generateOrderNo(long userId) {

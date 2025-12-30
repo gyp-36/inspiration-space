@@ -55,6 +55,15 @@ public class StorageService {
     // ====== 2. 生成预签名URL ======
     @SneakyThrows
     public String getPreSignedUrl(String bucketName, String objectKey, int expiry, TimeUnit unit) {
+        // MinIO 限制预签名 URL 的过期时间在 1 秒到 7 天之间
+        long expirySeconds = unit.toSeconds(expiry);
+        if (expirySeconds < 1) {
+            expiry = 1;
+            unit = TimeUnit.SECONDS;
+        } else if (expirySeconds > 7 * 24 * 3600) {
+            expiry = 7;
+            unit = TimeUnit.DAYS;
+        }
         try {
             return minioClient.getPresignedObjectUrl(
                 GetPresignedObjectUrlArgs.builder()

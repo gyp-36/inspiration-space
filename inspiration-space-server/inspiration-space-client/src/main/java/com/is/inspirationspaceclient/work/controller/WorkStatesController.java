@@ -1,7 +1,7 @@
 package com.is.inspirationspaceclient.work.controller;
 
 
-import com.is.inspirationspaceclient.work.model.vo.WorkStateVo;
+import com.is.inspirationspaceclient.work.model.vo.WorkRankVo;
 import com.is.inspirationspaceclient.work.service.WorkStateService;
 import com.is.inspirationspacecommon.util.ApiResponse;
 import com.is.inspirationspacecommon.util.JwtUtil;
@@ -79,18 +79,18 @@ public class WorkStatesController {
 
     @Operation(summary = "获取作品点赞排行榜")
     @GetMapping("/rank")
-    public ApiResponse<List<WorkStateVo>> getWorkLikeRank(
+    public ApiResponse<List<WorkRankVo>> getWorkLikeRank(
             @RequestParam(defaultValue = "10") int topN) {
-        List<WorkStateVo> result=workStateService.getWorkLikeRank(topN);
+        List<WorkRankVo> result=workStateService.getWorkLikeRank(topN);
         return ApiResponse.ok(result);
 
     }
 
     @Operation(summary = "获取作品畅销排行榜")
     @GetMapping("/sales")
-    public ApiResponse<List<WorkStateVo>> getWorkSalesRank(
+    public ApiResponse<List<WorkRankVo>> getWorkSalesRank(
             @RequestParam(defaultValue = "10") int topN) {
-        List<WorkStateVo> result =workStateService.getWorkSalesRank(topN);
+        List<WorkRankVo> result =workStateService.getWorkSalesRank(topN);
         return ApiResponse.ok(result);
 
     }

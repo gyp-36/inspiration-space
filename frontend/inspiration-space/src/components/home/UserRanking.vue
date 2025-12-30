@@ -21,14 +21,19 @@
           </svg>
         </div>
         
-        <img :src="user.avatar" alt="用户头像" class="user-avatar" />
+        <img 
+          :src="user.avatar" 
+          alt="用户头像" 
+          class="user-avatar" 
+          @click="goToProfile(user.id)"
+        />
         
-        <div class="user-details">
+        <div class="user-details" @click="goToProfile(user.id)">
           <div class="user-name-row">
             <span class="user-name">{{ user.name }}</span>
             <span class="level-badge">{{ user.level }}</span>
           </div>
-          <div class="user-score">积分: {{ user.points }}</div>
+          <div class="user-score">获赞数: {{ user.points }}</div>
         </div>
       </div>
     </div>
@@ -37,8 +42,10 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { getUserRanking } from '@/services/userService';
 
+const router = useRouter();
 const users = ref([]);
 const loading = ref(false);
 
@@ -49,10 +56,11 @@ const fetchRanking = async () => {
     if (res) {
       // 映射后端字段到前端展示字段
       users.value = res.map((user, index) => ({
+        id: user.userId, // 绑定用户ID
         rank: index + 1,
         name: user.username,
-        avatar: user.avatarUrl || 'https://bailian-bmp-pre.oss-cn-hangzhou.aliyuncs.com/public/system_agent/PlaceHolder.png',
-        points: user.likesCount || 0, // 暂时用点赞数代替积分
+        avatar: user.avatar || 'https://bailian-bmp-pre.oss-cn-hangzhou.aliyuncs.com/public/system_agent/PlaceHolder.png',
+        points: user.likesCount || 0, 
         level: getLevelByLikes(user.likesCount || 0)
       }));
     }
@@ -60,6 +68,12 @@ const fetchRanking = async () => {
     console.error('获取创作者榜单失败:', error);
   } finally {
     loading.value = false;
+  }
+};
+
+const goToProfile = (userId) => {
+  if (userId) {
+    router.push(`/user/${userId}`);
   }
 };
 

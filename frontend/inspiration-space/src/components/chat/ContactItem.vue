@@ -1,51 +1,69 @@
 <!-- ContactItem.vue -->
 <template>
-  <div 
-    :class="['contact-item', { active: isSelected }]"
-    @click="$emit('select', contact)"
+  <el-dropdown 
+    trigger="contextmenu" 
+    class="contact-item-dropdown"
+    @command="handleCommand"
   >
-    <!-- 会话头像 -->
-    <div class="avatar-container">
-      <img :src="avatarUrl" :alt="displayName" @error="handleAvatarError" />
-      <!-- 在线状态指示器（仅私聊） -->
-      <div 
-        v-if="contact.sessionType === 'PRIVATE'" 
-        :class="['online-indicator', { online: contact.isOnline }]"
-      ></div>
-      <!-- 未读消息数 -->
-      <div v-if="contact.unreadCount > 0" class="unread-badge">
-        {{ contact.unreadCount > 99 ? '99+' : contact.unreadCount }}
-      </div>
-    </div>
-    
-    <!-- 会话信息 -->
-    <div class="info-container">
-      <div class="header">
-        <span class="name">{{ displayName }}</span>
-        <span class="time">{{ formattedTime }}</span>
-      </div>
-      <div class="footer">
-        <div class="last-message">
-          <span v-if="contact.lastMsgType === 'IMAGE'">[图片]</span>
-          <span v-else-if="contact.lastMsgType === 'FILE'">[文件]</span>
-          <span v-else-if="contact.lastMsgType === 'SYSTEM'">[系统消息]</span>
-          <span v-else-if="contact.lastMsgType === 'RECALL'">[消息已撤回]</span>
-          <span v-else>{{ contact.lastMessage || '暂无消息' }}</span>
-        </div>
-        
-        <!-- 状态图标 -->
-        <div class="status-icons">
-          <el-icon v-if="contact.isPinned" class="pin-icon" title="已置顶"><PriceTag /></el-icon>
-          <el-icon v-if="contact.isMuted" class="mute-icon" title="消息免打扰"><Mute /></el-icon>
+    <div 
+      :class="['contact-item', { active: isSelected, 'is-pinned': contact.isPinned }]"
+      @click="$emit('select', contact)"
+    >
+      <!-- 会话头像 -->
+      <div class="avatar-container">
+        <img :src="avatarUrl" :alt="displayName" @error="handleAvatarError" />
+        <!-- 在线状态指示器（仅私聊） -->
+        <div 
+          v-if="contact.sessionType === 'PRIVATE'" 
+          :class="['online-indicator', { online: contact.isOnline }]"
+        ></div>
+        <!-- 未读消息数 -->
+        <div v-if="contact.unreadCount > 0" class="unread-badge">
+          {{ contact.unreadCount > 99 ? '99+' : contact.unreadCount }}
         </div>
       </div>
+      
+      <!-- 会话信息 -->
+      <div class="info-container">
+        <div class="header">
+          <span class="name">{{ displayName }}</span>
+          <span class="time">{{ formattedTime }}</span>
+        </div>
+        <div class="footer">
+          <div class="last-message">
+            <span v-if="contact.lastMsgType === 'IMAGE'">[图片]</span>
+            <span v-else-if="contact.lastMsgType === 'FILE'">[文件]</span>
+            <span v-else-if="contact.lastMsgType === 'SYSTEM'">[系统消息]</span>
+            <span v-else-if="contact.lastMsgType === 'RECALL'">[消息已撤回]</span>
+            <span v-else>{{ contact.lastMessage || '暂无消息' }}</span>
+          </div>
+          
+          <!-- 状态图标 -->
+          <div class="status-icons">
+            <el-icon v-if="contact.isPinned" class="pin-icon" title="已置顶"><PriceTag /></el-icon>
+            <el-icon v-if="contact.isMuted" class="mute-icon" title="消息免打扰"><Mute /></el-icon>
+          </div>
+        </div>
+      </div>
     </div>
-  </div>
+    <template #dropdown>
+      <el-dropdown-menu>
+        <el-dropdown-item command="pin">
+          <el-icon><PriceTag /></el-icon>
+          {{ contact.isPinned ? '取消置顶' : '置顶会话' }}
+        </el-dropdown-item>
+        <el-dropdown-item command="delete" class="delete-menu-item">
+          <el-icon><Delete /></el-icon>
+          删除会话
+        </el-dropdown-item>
+      </el-dropdown-menu>
+    </template>
+  </el-dropdown>
 </template>
 
 <script setup>
 import { computed } from 'vue'
-import { PriceTag, Mute } from '@element-plus/icons-vue'
+import { PriceTag, Mute, Delete } from '@element-plus/icons-vue'
 
 const props = defineProps({
   contact: {
@@ -58,7 +76,15 @@ const props = defineProps({
   }
 })
 
-defineEmits(['select'])
+const emit = defineEmits(['select', 'pin', 'delete'])
+
+const handleCommand = (command) => {
+  if (command === 'pin') {
+    emit('pin', props.contact)
+  } else if (command === 'delete') {
+    emit('delete', props.contact)
+  }
+}
 
 const isSelected = computed(() => {
   return props.contact.sessionId === props.selectedContactId || 
@@ -115,6 +141,10 @@ const handleAvatarError = (e) => {
 </script>
 
 <style scoped>
+.contact-item-dropdown {
+  width: 100%;
+}
+
 .contact-item {
   display: flex;
   align-items: center;
@@ -127,12 +157,49 @@ const handleAvatarError = (e) => {
   position: relative;
 }
 
+.contact-item.is-pinned {
+  background-color: #f2f6fc;
+}
+
+.contact-item.is-pinned::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background-color: #409eff;
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+}
+
 .contact-item:hover {
-  background-color: #f0f2f5;
+  background-color: #f5f7fa;
 }
 
 .contact-item.active {
-  background-color: #e8f0fe;
+  background-color: #ecf5ff;
+  box-shadow: 0 0 0 1px #409eff inset;
+}
+
+.contact-item.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  background-color: #409eff;
+  border-radius: 0 4px 4px 0;
+}
+
+.delete-menu-item {
+  color: #f56c6c;
+}
+
+.delete-menu-item:hover {
+  background-color: #fef0f0 !important;
+  color: #f56c6c !important;
 }
 
 .contact-item.active .name {
@@ -177,21 +244,23 @@ const handleAvatarError = (e) => {
 
 .unread-badge {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  background-color: #ef4444;
+  top: -4px;
+  right: -4px;
+  background-color: #ff4d4f;
   color: white;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 0 6px;
-  height: 18px;
-  line-height: 18px;
-  border-radius: 10px;
-  min-width: 18px;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 0 4px;
+  height: 16px;
+  line-height: 16px;
+  border-radius: 8px;
+  min-width: 16px;
   text-align: center;
-  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
-  border: 2px solid #fff;
-  z-index: 1;
+  box-shadow: 0 0 0 2px #fff;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .info-container {

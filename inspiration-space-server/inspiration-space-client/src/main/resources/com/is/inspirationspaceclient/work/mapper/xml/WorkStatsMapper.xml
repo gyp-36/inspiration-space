@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.is.inspirationspaceclient.work.mapper.WorkStatsMapper">
+
+    <resultMap id="WorkRankVoMap" type="com.is.inspirationspaceclient.work.model.vo.WorkRankVo">
+        <id property="workId" column="workId" />
+        <result property="title" column="title" />
+        <result property="cover" column="cover" />
+        <result property="author" column="author" />
+        <result property="userId" column="userId" />
+        <result property="likeCount" column="likeCount" />
+        <result property="totalSales" column="totalSales" />
+    </resultMap>
+
+    <select id="selectWorkSalesRank" resultMap="WorkRankVoMap">
+        SELECT 
+            w.work_id as workId,
+            w.title as title,
+            w.total_sales as totalSales,
+            w.cover_url as cover,
+            u.username as author,
+            u.user_id as userId
+        FROM work_info w
+        LEFT JOIN user_profile u ON w.creator_id = u.user_id
+        WHERE w.total_sales > 0
+        ORDER BY w.total_sales DESC, w.work_id ASC
+        LIMIT #{topN}
+    </select>
+
+    <select id="selectWorkLikeRank" resultMap="WorkRankVoMap">
+        SELECT 
+            w.work_id as workId,
+            w.title as title,
+            s.like_count as likeCount,
+            w.cover_url as cover,
+            u.username as author,
+            u.user_id as userId
+        FROM work_info w
+        INNER JOIN work_stats s ON w.work_id = s.work_id
+        LEFT JOIN user_profile u ON w.creator_id = u.user_id
+        WHERE s.like_count > 0
+        ORDER BY s.like_count DESC, w.work_id ASC
+        LIMIT #{topN}
+    </select>
+    
+</mapper>

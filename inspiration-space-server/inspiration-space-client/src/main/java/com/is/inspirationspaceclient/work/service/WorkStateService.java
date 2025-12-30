@@ -2,7 +2,7 @@ package com.is.inspirationspaceclient.work.service;
 
 
 import com.is.inspirationspaceclient.work.model.entity.WorkStats;
-import com.is.inspirationspaceclient.work.model.vo.WorkStateVo;
+import com.is.inspirationspaceclient.work.model.vo.WorkRankVo;
 
 import java.util.List;
 
@@ -23,7 +23,7 @@ public interface WorkStateService {
 
     WorkStats getWorkStats(Long workId);
 
-    List<WorkStateVo> getWorkSalesRank(int topN);
+    List<WorkRankVo> getWorkSalesRank(int topN);
 
-    List<WorkStateVo> getWorkLikeRank(int topN);
+    List<WorkRankVo> getWorkLikeRank(int topN);
 }

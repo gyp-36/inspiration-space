@@ -42,6 +42,11 @@ export const chatService = {
     return unwrapResponse(res)
   },
 
+  async markSessionAsRead(sessionId) {
+    const res = await privateApiCall(`/chat/session/${sessionId}/read`, 'PUT')
+    return unwrapResponse(res)
+  },
+
   // 会话列表
   async getChatSessions() {
     const res = await privateApiCall('/chat/sessions', 'GET')
@@ -51,6 +56,11 @@ export const chatService = {
   // 群聊管理
   async getGroupMembers(sessionId) {
     const res = await privateApiCall(`/chat/group/${sessionId}/members`, 'GET')
+    return unwrapResponse(res)
+  },
+
+  async getGroupInfo(sessionId) {
+    const res = await privateApiCall(`/chat/group/${sessionId}`, 'GET')
     return unwrapResponse(res)
   },
 
@@ -74,6 +84,21 @@ export const chatService = {
 
   async dissolveGroup(sessionId) {
     const res = await privateApiCall(`/chat/group/${sessionId}/dissolve`, 'POST')
+    return unwrapResponse(res)
+  },
+
+  async inviteToGroup(sessionId, userIds) {
+    const res = await privateApiCall(`/chat/group/${sessionId}/invite`, 'POST', userIds)
+    return unwrapResponse(res)
+  },
+
+  async updateGroupInfo(sessionId, groupData) {
+    const res = await privateApiCall(`/chat/group/${sessionId}/update`, 'POST', groupData)
+    return unwrapResponse(res)
+  },
+
+  async publishGroupNotice(sessionId, notice) {
+    const res = await privateApiCall(`/chat/group/${sessionId}/notice`, 'POST', notice)
     return unwrapResponse(res)
   },
 

@@ -32,7 +32,13 @@
           <div class="header-info-stats">
             <!-- 1. 用户名与简介 (紧靠头像右侧) -->
             <div class="user-info-side">
-              <h2 class="username">{{ stats.username || profile.username || '未设置用户名' }}</h2>
+              <div class="username-row">
+                <h2 class="username">{{ stats.username || profile.username || '未设置用户名' }}</h2>
+                <div class="user-id-badge" @click="copyUserId" title="点击复制 ID">
+                  <span class="id-text">ID: {{ profile.userId || stats.id || '-' }}</span>
+                  <el-icon class="copy-icon"><CopyDocument /></el-icon>
+                </div>
+              </div>
               <p class="bio" :title="stats.bio || profile.bio">{{ stats.bio || profile.bio || '这个人很懒，什么都没有写~' }}</p>
             </div>
 
@@ -142,12 +148,34 @@
             </el-tab-pane>
 
             <el-tab-pane label="我的发布" name="works">
-              <div class="tab-content">
-                <el-empty description="暂无作品，快去发布吧～" :image-size="200" />
+              <div class="tab-content works-panel">
+                <div v-if="userWorks.length > 0" class="works-grid">
+                  <div v-for="work in userWorks" :key="work.workId" class="grid-item">
+                    <WorkItem 
+                      :work="work" 
+                      :hideStats="true"
+                    />
+                  </div>
+                </div>
+                
+                <div v-if="userWorks.length > 0" class="pagination-wrapper">
+                  <el-pagination
+                    v-model:current-page="worksPage"
+                    :page-size="worksPageSize"
+                    layout="prev, pager, next"
+                    :total="worksTotal"
+                    @current-change="handleWorksPageChange"
+                  />
+                </div>
+
+                <el-empty v-else-if="!worksLoading" description="暂无作品，快去发布吧～" :image-size="200" />
+                <div v-else class="loading-placeholder">
+                   <el-skeleton :rows="5" animated />
+                </div>
               </div>
             </el-tab-pane>
 
-            <el-tab-pane label="我的收藏" name="collection">
+            <el-tab-pane label="收藏帖子" name="collection">
               <div class="tab-content collection-panel">
                 <div v-if="collectionPosts.length > 0" class="collection-grid">
                   <div v-for="post in collectionPosts" :key="post.postId" class="grid-item">
@@ -283,12 +311,14 @@
 
 <script setup>
 import { ElMessage } from 'element-plus';
-import { Camera, Edit, Lock, User, Message, Calendar, Postcard, Male, Female } from '@element-plus/icons-vue';
+import { Camera, Edit, Lock, User, Message, Calendar, Postcard, Male, Female, CopyDocument } from '@element-plus/icons-vue';
 import { ref, onMounted, reactive, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import PostCard from '@/components/forum/PostCard.vue';
+import WorkItem from '@/components/home/WorkItem.vue';
 import { getUser, getUserProfileInfo, getUserExtendInfo, updateUserInfo, updateAvatar, updatePassword, getAvatar } from '@/services/userService';
 import { getCollectedPosts } from '@/services/forumService';
+import { workService } from '@/services/workService';
 
 // ========== 状态 ==========
 const router = useRouter();
@@ -308,6 +338,13 @@ const collectionPage = ref(1);
 const collectionTotal = ref(0);
 const collectionLoading = ref(false);
 const collectionPageSize = ref(15);
+
+// 作品相关
+const userWorks = ref([]);
+const worksPage = ref(1);
+const worksTotal = ref(0);
+const worksLoading = ref(false);
+const worksPageSize = ref(12);
 
 // 头像URL
 const avatarUrl = computed(() => {
@@ -414,6 +451,17 @@ const triggerFileInput = () => {
   fileInputRef.value.click();
 };
 
+const copyUserId = () => {
+  const id = profile.value.userId || stats.value.id;
+  if (!id) return;
+  navigator.clipboard.writeText(String(id)).then(() => {
+    ElMessage.success('ID 已复制到剪贴板');
+  }).catch(err => {
+    console.error('复制失败:', err);
+    ElMessage.error('复制失败，请手动复制');
+  });
+};
+
 const handleAvatarUpload = async (event) => {
   const file = event.target.files[0];
   if (!file) return;
@@ -488,7 +536,32 @@ const handleTabClick = (tab) => {
     if (collectionPosts.value.length === 0) {
       fetchCollection(1);
     }
+  } else if (tab.paneName === 'works') {
+    // 切换到作品时自动加载
+    if (userWorks.value.length === 0) {
+      fetchUserWorks(1);
+    }
   }
+};
+
+const fetchUserWorks = async (page = 1) => {
+  worksLoading.value = true;
+  try {
+    const userId = localStorage.getItem('userId') || 1;
+    const res = await workService.getUserWorks(userId, page, worksPageSize.value);
+    userWorks.value = res.records || [];
+    worksTotal.value = res.total || 0;
+    worksPage.value = page;
+  } catch (err) {
+    console.error('获取作品失败', err);
+    ElMessage.error('获取作品列表失败');
+  } finally {
+    worksLoading.value = false;
+  }
+};
+
+const handleWorksPageChange = (page) => {
+  fetchUserWorks(page);
 };
 
 const fetchCollection = async (page = 1) => {
@@ -772,6 +845,36 @@ onMounted(() => {
   font-weight: 700;
   color: #2c3e50;
   margin: 0;
+}
+
+.username-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-id-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #f1f5f9;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #64748b;
+  font-size: 13px;
+  border: 1px solid #e2e8f0;
+}
+
+.user-id-badge:hover {
+  background: #e2e8f0;
+  color: #2c3e50;
+  transform: translateY(-1px);
+}
+
+.copy-icon {
+  font-size: 14px;
 }
 
 .bio {
@@ -1110,11 +1213,11 @@ onMounted(() => {
 }
 
 /* 收藏面板样式 */
-.collection-panel {
+.collection-panel, .works-panel {
   padding: 20px 0;
 }
 
-.collection-grid {
+.collection-grid, .works-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
@@ -1124,6 +1227,10 @@ onMounted(() => {
 .grid-item {
   display: flex;
   justify-content: center;
+}
+
+.works-grid .grid-item > * {
+  width: 100%;
 }
 
 .mini-card {

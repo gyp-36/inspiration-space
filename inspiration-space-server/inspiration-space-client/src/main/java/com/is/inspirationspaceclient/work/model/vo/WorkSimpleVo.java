@@ -67,4 +67,7 @@ public class WorkSimpleVo implements Serializable {
 
     @Schema(name = "isCollected", type = "Boolean", description = "是否已收藏")
     private Boolean isCollected;
+
+    @Schema(name = "isPurchased", type = "Boolean", description = "是否已购买")
+    private Boolean isPurchased;
 }

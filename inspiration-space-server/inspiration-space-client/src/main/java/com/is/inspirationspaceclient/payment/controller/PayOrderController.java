@@ -51,14 +51,15 @@ public class PayOrderController {
     //支付接口->生成支付订单->支付成功->支付通知->生成订单
     @Operation(summary = "支付接口")
     @PostMapping("/pay")
-    public ApiResponse<PaymentInfoVo> pay(@RequestHeader("Authorization") String token, @Valid @RequestBody String draftId, PaymentDto paymentDto) {
-        return ApiResponse.ok(payOrderService.pay(token, draftId, paymentDto));
+    public ApiResponse<PaymentInfoVo> pay(@RequestHeader("Authorization") String token, @Valid @RequestBody PaymentDto paymentDto) {
+        return ApiResponse.ok(payOrderService.pay(token, paymentDto.getDraftId(), paymentDto));
     }
 
     @Operation(summary = "支付通知")
     @PostMapping("/notify")
-    public ApiResponse<Boolean> payNotify(@RequestBody HttpServletRequest request, @RequestParam PaymentNotifyDto paymentNotifyDto) {
-        return ApiResponse.ok(payOrderService.payNotify(request, paymentNotifyDto));
+    public String payNotify(HttpServletRequest request) {
+        Boolean result = payOrderService.payNotify(request, null);
+        return result ? "success" : "fail";
     }
 
     //生成订单

@@ -52,9 +52,9 @@ public class WorkAttachmentsController {
     @Operation(summary = "获取作品附件列表")
     @GetMapping("/list/{workId}")
     public ApiResponse<List<WorkAttachmentVo>> getWorkAttachments(
-            @RequestHeader("Authorization") String token,
+            @RequestHeader(value = "Authorization", required = false) String token,
             @PathVariable Long workId) {
-        return ApiResponse.ok(workAttachmentsService.getWorkAttachments(workId));
+        return ApiResponse.ok(workAttachmentsService.getWorkAttachments(token, workId));
     }
 
 

@@ -136,7 +136,7 @@ public class UserController {
 
     @Operation(summary = "获取用户排行榜")
     @GetMapping("/ranking")
-    public ApiResponse<List<UserVo>> getUserRanking(@RequestParam(defaultValue = "10") int topN) {
+    public ApiResponse<List<UserRankVo>> getUserRanking(@RequestParam(defaultValue = "10") int topN) {
         return ApiResponse.ok(userService.getUserRanking(topN));
     }
 }

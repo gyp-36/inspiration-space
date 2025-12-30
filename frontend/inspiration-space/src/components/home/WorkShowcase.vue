@@ -71,9 +71,11 @@ import { ref, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import WorkItem from '@/components/home/WorkItem.vue';
 import { workService } from '@/services/workService';
+import { useUserStore } from '@/stores/userStore';
 
 const router = useRouter();
 const route = useRoute();
+const userStore = useUserStore();
 const works = ref([]);
 const loading = ref(false);
 const currentPage = ref(1);
@@ -138,6 +140,19 @@ watch(currentCategory, () => {
 watch(() => route.query.keyword, () => {
   currentPage.value = 1;
   fetchWorks(1);
+});
+
+// 监听登录状态变化，自动刷新列表（以获取最新的点赞、收藏状态）
+watch(() => userStore.isLogin, () => {
+  console.log('检测到登录状态变化，正在刷新作品列表...');
+  fetchWorks(currentPage.value);
+});
+
+// 监听路由路径变化，如果进入首页则刷新
+watch(() => route.path, (newPath) => {
+  if (newPath === '/' || newPath === '/home') {
+    fetchWorks(1);
+  }
 });
 
 onMounted(() => {

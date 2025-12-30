@@ -25,7 +25,7 @@
 <script setup>
 import { ref, reactive } from 'vue';
 import WorkShowcase from '@/components/home/WorkShowcase.vue';
-import Ranking from '@/components/home/Ranking.vue';
+import Ranking from '@/components/home/WorkRanking.vue';
 import UserRanking from '@/components/home/UserRanking.vue';
 
 const isLogin = ref(false);

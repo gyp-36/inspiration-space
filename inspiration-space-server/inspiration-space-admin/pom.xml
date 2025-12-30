@@ -93,17 +93,9 @@
         </dependency>
     </dependencies>
 
-    <!-- 子模块打包运行插件（继承父模块版本，无需重复写version） -->
     <build>
         <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <!-- 可选：指定启动类（若IDE无法自动识别） -->
-                <configuration>
-                    <mainClass>com.is.admin.AdminApplication</mainClass>
-                </configuration>
-            </plugin>
+            <!-- 移除 spring-boot-maven-plugin，不作为独立可执行包打包 -->
         </plugins>
     </build>
 </project>

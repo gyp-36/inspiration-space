@@ -5,7 +5,7 @@
     <div class="toolbar">
       <div class="left-tools">
         <el-tooltip content="表情" placement="top">
-          <el-button link class="tool-btn" @click="showEmoji = !showEmoji">
+          <el-button link class="tool-btn" @click.stop="showEmoji = !showEmoji">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/>
             </svg>
@@ -220,9 +220,9 @@ onMounted(() => {
 
 <style scoped>
 .message-input-container {
-  padding: 8px 16px 12px;
-  background-color: #1a1a1a;
-  border-top: 1px solid #2d2d2d;
+  padding: 12px 16px;
+  background-color: #ffffff;
+  border-top: 1px solid #f0f0f0;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -232,86 +232,105 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
 
 .left-tools {
   display: flex;
-  gap: 12px;
+  gap: 8px;
 }
 
 .tool-btn {
   font-size: 20px;
-  color: #a0a0a0;
+  color: #64748b;
   padding: 6px;
   transition: all 0.2s;
   height: auto;
 }
 
 .tool-btn:hover {
-  color: #ffffff;
-  background-color: #333333;
+  color: #10b981;
+  background-color: #f1f5f9;
   border-radius: 4px;
 }
 
 .char-count {
   font-size: 12px;
-  color: #666;
+  color: #94a3b8;
 }
 
 .char-count.over-limit {
-  color: #f56c6c;
+  color: #ef4444;
 }
 
 .input-area {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  background-color: #f8fafc;
+  border-radius: 12px;
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.input-area:focus-within {
+  background-color: #ffffff;
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
 }
 
 .message-textarea {
   width: 100%;
   border: none;
   background-color: transparent;
-  color: #e0e0e0;
-  font-size: 14px;
+  color: #1e293b;
+  font-size: 14.5px;
   line-height: 1.6;
   resize: none;
-  min-height: 100px;
+  min-height: 80px;
   max-height: 200px;
   outline: none;
-  padding: 4px 0;
+  padding: 0;
 }
 
 .message-textarea::placeholder {
-  color: #555;
+  color: #94a3b8;
 }
 
 .send-action {
   display: flex;
   justify-content: flex-end;
-  padding-top: 4px;
+  margin-top: 4px;
 }
 
 .send-btn-new {
-  background-color: #2b2b2b;
-  color: #666;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
   border: none;
-  padding: 6px 16px;
-  border-radius: 4px;
-  font-size: 13px;
+  padding: 8px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2);
 }
 
 .send-btn-new:not(:disabled):hover {
-  background-color: #3d3d3d;
-  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(16, 185, 129, 0.3);
+}
+
+.send-btn-new:not(:disabled):active {
+  transform: translateY(0);
 }
 
 .send-btn-new:disabled {
-  opacity: 0.5;
+  background: #e2e8f0;
+  color: #94a3b8;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* 表情选择器 */
@@ -319,22 +338,23 @@ onMounted(() => {
   position: absolute;
   bottom: 100%;
   left: 16px;
-  background: #252525;
-  border: 1px solid #333;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  width: 300px;
-  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  width: 320px;
+  padding: 16px;
   z-index: 100;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .emoji-list {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   gap: 8px;
-  max-height: 200px;
+  max-height: 240px;
   overflow-y: auto;
+  padding-right: 4px;
 }
 
 .emoji-list::-webkit-scrollbar {
@@ -342,22 +362,23 @@ onMounted(() => {
 }
 
 .emoji-list::-webkit-scrollbar-thumb {
-  background: #444;
-  border-radius: 2px;
+  background: #e2e8f0;
+  border-radius: 10px;
 }
 
 .emoji-item {
-  font-size: 20px;
+  font-size: 22px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 4px;
-  border-radius: 4px;
-  transition: background 0.2s;
+  border-radius: 8px;
+  transition: all 0.2s;
 }
 
 .emoji-item:hover {
-  background: #333;
+  background: #f1f5f9;
+  transform: scale(1.1);
 }
 </style>
