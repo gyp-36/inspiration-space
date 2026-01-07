@@ -175,9 +175,25 @@ export class ChatWebSocket {
   connect(token) {
     return new Promise((resolve, reject) => {
       try {
-        // 确保 token 被正确编码，特别是包含 "Bearer " 前缀时
+        // 确保 token 被正确编码
         const encodedToken = encodeURIComponent(token)
-        this.ws = new WebSocket(`ws://localhost:8080/client/ws?token=${encodedToken}`)
+        
+        // 根据环境变量或当前 host 动态构建 WebSocket 地址
+        const baseUrl = import.meta.env.VITE_API_BASE_URL || ''
+        let wsUrl
+        
+        if (baseUrl.startsWith('http')) {
+          // 开发环境: baseUrl 通常是 http://localhost:8080/client
+          wsUrl = baseUrl.replace('http', 'ws') + '/ws'
+        } else {
+          // 生产环境: 直接使用 Nginx 配置的 /client/ws 路径
+          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+          const host = window.location.host
+          wsUrl = `${protocol}//${host}/client/ws`
+        }
+
+        console.log('正在连接 WebSocket:', wsUrl)
+        this.ws = new WebSocket(`${wsUrl}?token=${encodedToken}`)
         
         this.ws.onopen = () => {
           console.log('WebSocket连接已建立')

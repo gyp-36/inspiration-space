@@ -32,7 +32,12 @@
               </el-avatar>
               <div class="author-meta">
                 <div class="author-name">{{ post.username || '匿名用户' }}</div>
-                <div class="publish-time">{{ formatTime(post.createAt) }}</div>
+                <div class="publish-time">
+                  {{ formatTime(post.createAt) }}
+                  <span v-if="post.category !== null && post.category !== undefined" class="detail-category-tag">
+                    {{ getCategoryLabel(post.category) }}
+                  </span>
+                </div>
               </div>
               <div class="flex-spacer"></div>
               <el-button 
@@ -212,6 +217,7 @@ import {
   likeComment as likeCommentApi,
   unlikeComment as unlikeCommentApi 
 } from '@/services/forumService';
+import { getCategoryLabel } from '@/constants/forumConstants';
 import { getUserInfo, getAvatar, followUser, unfollowUser, checkFollowStatus } from '@/services/userService';
 import { ElMessage } from 'element-plus';
 import { 
@@ -474,6 +480,18 @@ onMounted(fetchDetail);
 .publish-time {
   font-size: 14px;
   color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-category-tag {
+  font-size: 12px;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
 }
 
 .follow-btn {

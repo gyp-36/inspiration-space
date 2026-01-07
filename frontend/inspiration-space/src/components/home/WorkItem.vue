@@ -1,5 +1,3 @@
-
-<!-- components/WorkItem.vue: 增强版作品组件，添加描述、标签、统计信息等 -->
 <template>
   <div class="work-item" ref="workItemRef" @click="handleCardClick">
     <div class="work-header">

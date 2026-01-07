@@ -4,8 +4,10 @@ server:
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/inspiration-space?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/inspiration-space?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8
+    #url: jdbc:mysql://172.19.30.120:3306/inspiration-space?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: root
+    #username: gyp
     password: 573488
 
   servlet:
@@ -46,7 +48,8 @@ rabbitmq:
 
 # ===== minio配置 =====
 minio:
-  endpoint: http://127.0.0.1:9000
+  endpoint: http://8.163.13.117:9000
+  #endpoint: http://172.19.30.120:19000
   access-key: minioadmin
   secret-key: minioadmin
   region: us-east-1

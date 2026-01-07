@@ -1,5 +1,6 @@
 package com.is.inspirationspaceclient.forum.model.vo;
 
+import com.is.inspirationspaceclient.forum.model.entity.enums.PostCategory;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -37,6 +38,9 @@ public class PostSimpleVo implements Serializable {
 
     @Schema(name = "productUrl", type = "String", description = "商品跳转链接")
     private String productUrl;
+
+    @Schema(name = "category", type = "PostCategory", description = "帖子分类")
+    private PostCategory category;
 
     @Schema(name = "create_at",type = "LocalDateTime",description = "创建时间")
     private LocalDateTime createAt;

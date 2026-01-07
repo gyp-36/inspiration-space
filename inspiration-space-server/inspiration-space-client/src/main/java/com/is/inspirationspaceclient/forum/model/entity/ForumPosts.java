@@ -3,6 +3,7 @@ package com.is.inspirationspaceclient.forum.model.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 
+import com.is.inspirationspaceclient.forum.model.entity.enums.PostCategory;
 import com.is.inspirationspaceclient.forum.model.entity.enums.Visibility;
 import lombok.Data;
 
@@ -60,6 +61,12 @@ public class ForumPosts {
      */
     @TableField("visibility")
     private Visibility visibility;
+
+    /**
+     * 帖子分类
+     */
+    @TableField("category")
+    private PostCategory category;
     
     /**
      * 软删除：0=正常，1=已删

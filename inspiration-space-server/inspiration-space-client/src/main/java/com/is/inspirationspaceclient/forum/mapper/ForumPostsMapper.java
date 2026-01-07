@@ -17,7 +17,7 @@ import java.util.List;
 public interface ForumPostsMapper extends BaseMapper<ForumPosts> {
 
     @Select("<script>" +
-            "SELECT fp.post_id as postId, fp.user_id as userId, fp.title, fp.content, fp.image_urls as imageUrls, fp.product_url as productUrl, fp.created_at as createAt, " +
+            "SELECT fp.post_id as postId, fp.user_id as userId, fp.title, fp.content, fp.image_urls as imageUrls, fp.product_url as productUrl, fp.category, fp.created_at as createAt, " +
             "u.username, u.avatar_url as avatar, " +
             "fps.like_count as `like`, fps.repost_count as repost, fps.comment_count as commentCount, " +
             "fps.collect_count as collect, fps.view_count as view " +
@@ -28,11 +28,14 @@ public interface ForumPostsMapper extends BaseMapper<ForumPosts> {
             "<if test='keyword != null and keyword != \"\"'>" +
             "AND (fp.title LIKE CONCAT('%', #{keyword}, '%') OR fp.content LIKE CONCAT('%', #{keyword}, '%')) " +
             "</if>" +
+            "<if test='category != null'>" +
+            "AND fp.category = #{category} " +
+            "</if>" +
             "ORDER BY ${orderByColumn} DESC" +
             "</script>")
-    Page<PostSimpleVo> selectPostsWithStats(Page<PostSimpleVo> page, @Param("orderByColumn") String orderByColumn, @Param("keyword") String keyword);
+    Page<PostSimpleVo> selectPostsWithStats(Page<PostSimpleVo> page, @Param("orderByColumn") String orderByColumn, @Param("keyword") String keyword, @Param("category") Integer category);
 
-    @Select("SELECT fp.post_id as postId, fp.user_id as userId, fp.title, fp.content, fp.image_urls as imageUrls, fp.product_url as productUrl, fp.created_at as createAt, " +
+    @Select("SELECT fp.post_id as postId, fp.user_id as userId, fp.title, fp.content, fp.image_urls as imageUrls, fp.product_url as productUrl, fp.category, fp.created_at as createAt, " +
             "u.username, u.avatar_url as avatar, " +
             "fps.like_count as `like`, fps.repost_count as repost, fps.comment_count as commentCount, " +
             "fps.collect_count as collect, fps.view_count as view " +
@@ -46,7 +49,7 @@ public interface ForumPostsMapper extends BaseMapper<ForumPosts> {
     Page<PostSimpleVo> selectCollectedPosts(Page<PostSimpleVo> page, @Param("userId") Long userId);
 
     @Select("SELECT fp.post_id as postId, fp.user_id as userId, fp.title, fp.content, fp.image_urls as imageUrls, " +
-            "fp.product_url as productUrl, fp.created_at as createAt, " +
+            "fp.product_url as productUrl, fp.category, fp.created_at as createAt, " +
             "fps.like_count as `like`, fps.repost_count as repost, fps.comment_count as commentCount, " +
             "fps.collect_count as collect, fps.view_count as view " +
             "FROM forum_posts fp " +

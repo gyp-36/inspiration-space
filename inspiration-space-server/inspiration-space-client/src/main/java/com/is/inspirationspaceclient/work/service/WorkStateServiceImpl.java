@@ -1,6 +1,4 @@
 package com.is.inspirationspaceclient.work.service;
-
-
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.is.inspirationspaceclient.work.mapper.WorkStatsMapper;
 import com.is.inspirationspaceclient.work.model.entity.WorkStats;
@@ -19,9 +17,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
-
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
@@ -378,6 +373,12 @@ public class WorkStateServiceImpl implements WorkStateService {
     }
 
 
+    /**
+     * 获取作品日点赞排行榜
+     *
+     * @param topN 前topN条数据
+     * @return 排序后的作品列表
+     */
     @Override
     public List<WorkRankVo> getWorkLikeRank(int topN) {
         // 1. 验证参数

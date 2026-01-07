@@ -1,5 +1,6 @@
 package com.is.inspirationspaceclient.forum.model.dto;
 
+import com.is.inspirationspaceclient.forum.model.entity.enums.PostCategory;
 import com.is.inspirationspaceclient.work.model.entity.enums.Visibility;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;
@@ -32,6 +33,9 @@ public class ForumCreateDto implements Serializable {
 
     @Schema(name = "visibility", type = "Integer", description = "可见范围(0公开，1私密，2好友可见)")
     private Visibility visibility;
+
+    @Schema(name = "category", type = "Integer", description = "帖子分类")
+    private PostCategory category;
 
 
 }

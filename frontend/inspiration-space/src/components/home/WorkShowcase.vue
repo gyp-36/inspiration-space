@@ -36,22 +36,24 @@
       </div>
       
       <!-- 分页控制 -->
-      <div class="pagination" v-if="totalPages > 1">
-        <button 
-          class="page-btn" 
-          :disabled="currentPage === 1"
-          @click="changePage(currentPage - 1)"
-        >
-          上一页
-        </button>
-        <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
-        <button 
-          class="page-btn" 
-          :disabled="currentPage === totalPages"
-          @click="changePage(currentPage + 1)"
-        >
-          下一页
-        </button>
+      <div class="pagination" v-if="totalRecords > 0">
+        <span class="page-info">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页 ({{ totalRecords }} 条)</span>
+        <div class="pagination-actions">
+          <button 
+            class="page-btn" 
+            :disabled="currentPage === 1"
+            @click="changePage(currentPage - 1)"
+          >
+            上一页
+          </button>
+          <button 
+            class="page-btn" 
+            :disabled="currentPage === totalPages"
+            @click="changePage(currentPage + 1)"
+          >
+            下一页
+          </button>
+        </div>
       </div>
     </div>
     
@@ -80,6 +82,7 @@ const works = ref([]);
 const loading = ref(false);
 const currentPage = ref(1);
 const totalPages = ref(1);
+const totalRecords = ref(0);
 const pageSize = 10; // 2x5 布局，每页10个
 
 const handlePublishClick = () => {
@@ -113,7 +116,8 @@ const fetchWorks = async (page = 1) => {
     if (res) {
       works.value = res.records || [];
       currentPage.value = res.current || 1;
-      totalPages.value = res.pages || 1;
+      totalRecords.value = res.total || 0;
+      totalPages.value = res.pages || Math.ceil((res.total || 0) / pageSize) || 1;
     }
   } catch (error) {
     console.error('获取作品列表失败:', error);
@@ -311,8 +315,22 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  margin-top: 30px;
-  gap: 15px;
+  margin-top: 40px;
+  gap: 24px;
+  padding: 20px 0;
+  border-top: 1px solid #f0f0f0;
+}
+
+.page-info {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .page-btn {
@@ -334,11 +352,6 @@ onMounted(() => {
 .page-btn:not(:disabled):hover {
   border-color: #0066cc;
   color: #0066cc;
-}
-
-.page-info {
-  font-size: 14px;
-  color: #666;
 }
 
 .loading-state, .empty-state {

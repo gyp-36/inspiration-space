@@ -15,7 +15,12 @@ public class CorsConfig {
     public CorsConfigurationSource customcorsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         // 允许的源，使用 patterns 以支持 credentials
-        configuration.setAllowedOriginPatterns(Arrays.asList("http://localhost:*", "http://127.0.0.1:*"));
+        configuration.setAllowedOriginPatterns(Arrays.asList(
+                "http://localhost:*",
+                "http://127.0.0.1:*",
+                "http://8.163.13.117:*",
+                "https://8.163.13.117:*"
+        ));
         // 允许的方法
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         // 允许的头

@@ -71,7 +71,8 @@ export const useChatStore = defineStore('chat', () => {
   // 当前会话的消息列表
   const currentMessages = computed(() => {
     if (!currentSession.value) return []
-    return sessionMessages.get(currentSession.value.sessionId) || []
+    // 强制使用 String 作为 Key，确保能取到值
+    return sessionMessages.get(String(currentSession.value.sessionId)) || []
   })
   
   // 当前会话的成员列表
@@ -240,7 +241,7 @@ export const useChatStore = defineStore('chat', () => {
       const response = await chatService.getGroupMembers(sessionId)
       
       if (response && Array.isArray(response)) {
-        sessionMembers.set(sessionId, response.map(member => ({
+        sessionMembers.set(String(sessionId), response.map(member => ({
           userId: member.userId,
           userName: member.userName,
           avatar: member.avatar,
@@ -249,12 +250,12 @@ export const useChatStore = defineStore('chat', () => {
           isOnline: member.isOnline || false
         })))
       } else {
-        sessionMembers.set(sessionId, [])
+        sessionMembers.set(String(sessionId), [])
       }
       
     } catch (error) {
       console.error('加载会话成员失败:', error)
-      sessionMembers.set(sessionId, [])
+      sessionMembers.set(String(sessionId), [])
     } finally {
       loading.value.members = false
     }
@@ -304,32 +305,32 @@ export const useChatStore = defineStore('chat', () => {
         }))
         
       // 初始化消息映射
-      if (!sessionMessages.has(sessionId)) {
-        sessionMessages.set(sessionId, [])
+      if (!sessionMessages.has(String(sessionId))) {
+        sessionMessages.set(String(sessionId), [])
       }
       
       // 更新分页信息
-      messagePagination.set(sessionId, {
+      messagePagination.set(String(sessionId), {
         page: current,
         size: pageSize,
         total: total,
         hasMore: Array.isArray(response) ? false : (current * pageSize) < total
       })
       
-      const existingMessages = sessionMessages.get(sessionId)
+      const existingMessages = sessionMessages.get(String(sessionId))
       if (page === 1) {
         // 第一页，替换所有消息
-        sessionMessages.set(sessionId, messages)
+        sessionMessages.set(String(sessionId), messages)
       } else {
         // 后续页，追加到前面（历史消息）
-        sessionMessages.set(sessionId, [...messages, ...existingMessages])
+        sessionMessages.set(String(sessionId), [...messages, ...existingMessages])
       }
         
       } else {
         if (page === 1) {
-          sessionMessages.set(sessionId, [])
+          sessionMessages.set(String(sessionId), [])
         }
-        messagePagination.set(sessionId, {
+        messagePagination.set(String(sessionId), {
           page: 1,
           size: size,
           total: 0,
@@ -342,8 +343,8 @@ export const useChatStore = defineStore('chat', () => {
       ElMessage.error('加载消息失败')
       
       // 确保有默认值
-      if (!sessionMessages.has(sessionId)) {
-        sessionMessages.set(sessionId, [])
+      if (!sessionMessages.has(String(sessionId))) {
+        sessionMessages.set(String(sessionId), [])
       }
     } finally {
       loading.value.messages = false
@@ -355,7 +356,7 @@ export const useChatStore = defineStore('chat', () => {
     if (!currentSession.value) return
     
     const sessionId = currentSession.value.sessionId
-    const pagination = messagePagination.get(sessionId)
+    const pagination = messagePagination.get(String(sessionId))
     
     if (!pagination || !pagination.hasMore) return
     
@@ -399,10 +400,10 @@ export const useChatStore = defineStore('chat', () => {
       }
       
       // 添加到本地消息列表
-      if (!sessionMessages.has(currentSession.value.sessionId)) {
-        sessionMessages.set(currentSession.value.sessionId, [])
+      if (!sessionMessages.has(String(currentSession.value.sessionId))) {
+        sessionMessages.set(String(currentSession.value.sessionId), [])
       }
-      const messages = sessionMessages.get(currentSession.value.sessionId)
+      const messages = sessionMessages.get(String(currentSession.value.sessionId))
       messages.push(localMessage)
       
       // 发送到服务器
@@ -441,7 +442,7 @@ export const useChatStore = defineStore('chat', () => {
       ElMessage.error('发送消息失败')
       
       // 标记消息为失败
-      const messages = sessionMessages.get(currentSession.value.sessionId) || []
+      const messages = sessionMessages.get(String(currentSession.value.sessionId)) || []
       const failedMessage = messages.find(msg => msg.localStatus === 'SENDING')
       if (failedMessage) {
         failedMessage.localStatus = 'FAILED'
@@ -483,7 +484,7 @@ export const useChatStore = defineStore('chat', () => {
       await chatService.markSessionAsRead(sessionId)
       
       // 更新本地消息状态
-      const messages = sessionMessages.get(sessionId) || []
+      const messages = sessionMessages.get(String(sessionId)) || []
       messages.forEach(msg => {
         if (String(msg.senderId) !== String(currentUserId.value) && 
             (msg.status === 'DELIVERED' || msg.status === 'SENT')) {
@@ -520,7 +521,7 @@ export const useChatStore = defineStore('chat', () => {
       
       // 更新本地消息状态
       if (targetSessionId) {
-        const messages = sessionMessages.get(targetSessionId) || []
+        const messages = sessionMessages.get(String(targetSessionId)) || []
         const message = messages.find(msg => msg.messageId === messageId)
         if (message) {
           message.isRead = true
@@ -554,7 +555,7 @@ export const useChatStore = defineStore('chat', () => {
       
       // 更新本地消息状态
       if (targetSessionId) {
-        const messages = sessionMessages.get(targetSessionId) || []
+        const messages = sessionMessages.get(String(targetSessionId)) || []
         const message = messages.find(msg => msg.messageId === messageId)
         if (message) {
           message.msgType = 'RECALL'
@@ -983,38 +984,57 @@ export const useChatStore = defineStore('chat', () => {
     
     if (!sessionId || !data) return
     
+    // 确保 data 是对象
+    let msgData = data
+    if (typeof data === 'string') {
+      try {
+        msgData = JSON.parse(data)
+      } catch (e) {
+        console.error('解析消息数据失败:', e)
+        // 如果解析失败，可能本身就是字符串内容？暂时保持原样
+      }
+    }
+
     // 标准化消息格式
     const normalizedMessage = {
-      messageId: data.messageId,
-      sessionId: data.sessionId,
-      senderId: data.senderId,
-      content: data.content,
-      msgType: data.msgType,
-      fileUrl: data.fileUrl,
-      fileName: data.fileName,
-      fileSize: data.fileSize,
-      status: data.status || 'NORMAL',
-      sentAt: data.sentAt || new Date().toISOString(),
-      senderName: data.senderName,
-      senderAvatar: data.senderAvatar,
-      isRead: data.isRead || false
+      messageId: msgData.messageId || msgData.id,
+      sessionId: String(sessionId), // 确保 sessionId 是字符串
+      senderId: msgData.senderId,
+      content: msgData.content,
+      msgType: msgData.msgType || 'TEXT', // 提供默认值
+      fileUrl: msgData.fileUrl,
+      fileName: msgData.fileName,
+      fileSize: msgData.fileSize,
+      status: msgData.status || 'NORMAL',
+      sentAt: msgData.sentAt || new Date().toISOString(),
+      senderName: msgData.senderName,
+      senderAvatar: msgData.senderAvatar,
+      isRead: msgData.isRead || false
     }
     
     // 如果当前会话就是消息所属的会话，添加到消息列表
-    if (currentSession.value && currentSession.value.sessionId === sessionId) {
-      if (!sessionMessages.has(sessionId)) {
-        sessionMessages.set(sessionId, [])
-      }
-      const messages = sessionMessages.get(sessionId)
-      messages.push(normalizedMessage)
+    // 使用 String() 转换确保类型匹配，避免 ID 类型不一致导致判断失败
+    if (currentSession.value && String(currentSession.value.sessionId) === String(sessionId)) {
+      const messages = sessionMessages.get(String(sessionId)) || []
+      // 使用解构赋值确保触发 Vue 的响应式更新
+      sessionMessages.set(String(sessionId), [...messages, normalizedMessage])
       
+      // 显式确保当前会话未读数为 0
+      const session = sessions.value.find(s => String(s.sessionId) === String(sessionId))
+      if (session) {
+        if (session.unreadCount > 0) {
+          totalUnreadCount.value = Math.max(0, totalUnreadCount.value - session.unreadCount)
+          session.unreadCount = 0
+        }
+      }
+
       // 自动标记已读（因为是当前会话）
       if (String(normalizedMessage.senderId) !== String(currentUserId.value)) {
         markAsRead(normalizedMessage.messageId)
       }
     } else {
       // 否则增加未读计数
-      const session = sessions.value.find(s => s.sessionId === sessionId)
+      const session = sessions.value.find(s => String(s.sessionId) === String(sessionId))
       if (session) {
         session.unreadCount = (session.unreadCount || 0) + 1
         totalUnreadCount.value++
@@ -1030,7 +1050,7 @@ export const useChatStore = defineStore('chat', () => {
     }
     
     // 更新会话的最后消息信息
-    const session = sessions.value.find(s => s.sessionId === sessionId)
+    const session = sessions.value.find(s => String(s.sessionId) === String(sessionId))
     if (session) {
       session.lastMessage = normalizedMessage.content
       session.lastMessageTime = normalizedMessage.sentAt
@@ -1043,8 +1063,8 @@ export const useChatStore = defineStore('chat', () => {
     const { messageId, sessionId } = message
     
     // 更新消息状态为已读
-    if (sessionMessages.has(sessionId)) {
-      const messages = sessionMessages.get(sessionId)
+    if (sessionMessages.has(String(sessionId))) {
+      const messages = sessionMessages.get(String(sessionId))
       const msg = messages.find(m => m.messageId === messageId)
       if (msg) {
         msg.isRead = true
@@ -1057,8 +1077,8 @@ export const useChatStore = defineStore('chat', () => {
   const handleMessageRecall = (message) => {
     const { messageId, sessionId } = message
     
-    if (sessionMessages.has(sessionId)) {
-      const messages = sessionMessages.get(sessionId)
+    if (sessionMessages.has(String(sessionId))) {
+      const messages = sessionMessages.get(String(sessionId))
       const msg = messages.find(m => m.messageId === messageId)
       if (msg) {
         msg.msgType = 'RECALL'
@@ -1073,7 +1093,7 @@ export const useChatStore = defineStore('chat', () => {
     const { sessionId, userId, userName } = message
     
     // 显示系统消息
-    if (currentSession.value && currentSession.value.sessionId === sessionId) {
+    if (currentSession.value && String(currentSession.value.sessionId) === String(sessionId)) {
       const joinMessage = {
         messageId: Date.now(),
         sessionId: sessionId,
@@ -1083,10 +1103,10 @@ export const useChatStore = defineStore('chat', () => {
         sentAt: new Date().toISOString()
       }
       
-      if (!sessionMessages.has(sessionId)) {
-        sessionMessages.set(sessionId, [])
+      if (!sessionMessages.has(String(sessionId))) {
+        sessionMessages.set(String(sessionId), [])
       }
-      const messages = sessionMessages.get(sessionId)
+      const messages = sessionMessages.get(String(sessionId))
       messages.push(joinMessage)
     }
     
@@ -1100,7 +1120,7 @@ export const useChatStore = defineStore('chat', () => {
     const { sessionId, userId, userName } = message
     
     // 显示系统消息
-    if (currentSession.value && currentSession.value.sessionId === sessionId) {
+    if (currentSession.value && String(currentSession.value.sessionId) === String(sessionId)) {
       const leaveMessage = {
         messageId: Date.now(),
         sessionId: sessionId,
@@ -1110,10 +1130,10 @@ export const useChatStore = defineStore('chat', () => {
         sentAt: new Date().toISOString()
       }
       
-      if (!sessionMessages.has(sessionId)) {
-        sessionMessages.set(sessionId, [])
+      if (!sessionMessages.has(String(sessionId))) {
+        sessionMessages.set(String(sessionId), [])
       }
-      const messages = sessionMessages.get(sessionId)
+      const messages = sessionMessages.get(String(sessionId))
       messages.push(leaveMessage)
     }
     
@@ -1127,18 +1147,18 @@ export const useChatStore = defineStore('chat', () => {
     const { sessionId } = message
     
     // 从会话列表中移除
-    const index = sessions.value.findIndex(s => s.sessionId === sessionId)
+    const index = sessions.value.findIndex(s => String(s.sessionId) === String(sessionId))
     if (index !== -1) {
       sessions.value.splice(index, 1)
     }
     
     // 清空相关缓存
-    sessionMessages.delete(sessionId)
-    sessionMembers.delete(sessionId)
-    messagePagination.delete(sessionId)
+    sessionMessages.delete(String(sessionId))
+    sessionMembers.delete(String(sessionId))
+    messagePagination.delete(String(sessionId))
     
     // 如果当前会话就是这个，清空当前会话
-    if (currentSession.value && currentSession.value.sessionId === sessionId) {
+    if (currentSession.value && String(currentSession.value.sessionId) === String(sessionId)) {
       currentSession.value = null
       ElMessage.warning('当前群聊已被解散')
     }
@@ -1150,9 +1170,9 @@ export const useChatStore = defineStore('chat', () => {
     const content = `群公告: ${notice}`
     const sentAt = new Date().toISOString()
     
-    // 如果当前会话就是消息所属的会话，添加到消息列表
-    if (currentSession.value && currentSession.value.sessionId === sessionId) {
-      const noticeMessage = {
+    // 如果当前会话就是公告所属的会话，添加到消息列表
+    if (currentSession.value && String(currentSession.value.sessionId) === String(sessionId)) {
+      const normalizedNotice = {
         messageId: Date.now(),
         sessionId: sessionId,
         senderId: 0, // 系统消息
@@ -1161,14 +1181,21 @@ export const useChatStore = defineStore('chat', () => {
         sentAt: sentAt
       }
       
-      if (!sessionMessages.has(sessionId)) {
-        sessionMessages.set(sessionId, [])
+      const messages = sessionMessages.get(String(sessionId)) || []
+      // 使用解构赋值确保触发 Vue 的响应式更新
+      sessionMessages.set(String(sessionId), [...messages, normalizedNotice])
+      
+      // 显式确保当前会话未读数为 0
+      const session = sessions.value.find(s => String(s.sessionId) === String(sessionId))
+      if (session) {
+        if (session.unreadCount > 0) {
+          totalUnreadCount.value = Math.max(0, totalUnreadCount.value - session.unreadCount)
+          session.unreadCount = 0
+        }
       }
-      const messages = sessionMessages.get(sessionId)
-      messages.push(noticeMessage)
     } else {
       // 否则增加未读计数
-      const session = sessions.value.find(s => s.sessionId === sessionId)
+      const session = sessions.value.find(s => String(s.sessionId) === String(sessionId))
       if (session) {
         session.unreadCount = (session.unreadCount || 0) + 1
         totalUnreadCount.value++
@@ -1177,7 +1204,7 @@ export const useChatStore = defineStore('chat', () => {
     }
     
     // 更新会话的最后消息信息
-    const session = sessions.value.find(s => s.sessionId === sessionId)
+    const session = sessions.value.find(s => String(s.sessionId) === String(sessionId))
     if (session) {
       session.lastMessage = content
       session.lastMessageTime = sentAt

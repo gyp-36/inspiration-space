@@ -64,9 +64,10 @@ public class ForumController {
             @RequestHeader(value = "Authorization", required = false) String token,
             @RequestParam String sort,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Integer category,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return ApiResponse.ok(forumService.getAllPosts(token, sort, keyword, page, size));
+        return ApiResponse.ok(forumService.getAllPosts(token, sort, keyword, category, page, size));
     }
 
     @Operation(summary = "获取收藏的帖子")

@@ -33,7 +33,7 @@ const decodeBase64Url = (base64UrlStr) => {
   }
 };
 
-const BASE_URL = 'http://localhost:8080/client';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const handleHttpError = async (response, responseClone, apiType) => {
   let errorMessage = `HTTP错误 [${response.status}]`;

@@ -15,61 +15,107 @@
     </div>
 
     <!-- 顶部搜索和排序栏 -->
-    <div class="search-bar-inner glass-effect">
-      <el-select v-model="sortMethod" placeholder="排序" @change="handleSortChange" class="sort-select-left">
-        <el-option value="time" label="最新发布">
-          <div class="option-item">
-            <el-icon><Clock /></el-icon>
-            <span>最新发布</span>
-          </div>
-        </el-option>
-        <el-option value="like" label="最多点赞">
-          <div class="option-item">
-            <el-icon><Pointer /></el-icon>
-            <span>最多点赞</span>
-          </div>
-        </el-option>
-        <el-option value="comment" label="最多评论">
-          <div class="option-item">
-            <el-icon><ChatDotRound /></el-icon>
-            <span>最多评论</span>
-          </div>
-        </el-option>
-        <el-option value="view" label="最多浏览">
-          <div class="option-item">
-            <el-icon><ViewIcon /></el-icon>
-            <span>最多浏览</span>
-          </div>
-        </el-option>
-        <el-option value="collect" label="最多收藏">
-          <div class="option-item">
-            <el-icon><CollectionTag /></el-icon>
-            <span>最多收藏</span>
-          </div>
-        </el-option>
-        <el-option value="repost" label="最多转发">
-          <div class="option-item">
-            <el-icon><Share /></el-icon>
-            <span>最多转发</span>
-          </div>
-        </el-option>
-      </el-select>
+    <div class="search-section-container">
+      <div class="search-bar-inner glass-effect">
+        <el-select v-model="sortMethod" placeholder="排序" @change="handleSortChange" class="sort-select-left">
+          <el-option value="time" label="最新发布">
+            <div class="option-item">
+              <el-icon><Clock /></el-icon>
+              <span>最新发布</span>
+            </div>
+          </el-option>
+          <el-option value="category_filter" label="按分类筛选">
+            <div class="option-item">
+              <el-icon><Menu /></el-icon>
+              <span>按分类筛选</span>
+            </div>
+          </el-option>
+          <el-option value="like" label="最多点赞">
+            <div class="option-item">
+              <el-icon><Pointer /></el-icon>
+              <span>最多点赞</span>
+            </div>
+          </el-option>
+          <el-option value="comment" label="最多评论">
+            <div class="option-item">
+              <el-icon><ChatDotRound /></el-icon>
+              <span>最多评论</span>
+            </div>
+          </el-option>
+          <el-option value="view" label="最多浏览">
+            <div class="option-item">
+              <el-icon><ViewIcon /></el-icon>
+              <span>最多浏览</span>
+            </div>
+          </el-option>
+          <el-option value="collect" label="最多收藏">
+            <div class="option-item">
+              <el-icon><CollectionTag /></el-icon>
+              <span>最多收藏</span>
+            </div>
+          </el-option>
+          <el-option value="repost" label="最多转发">
+            <div class="option-item">
+              <el-icon><Share /></el-icon>
+              <span>最多转发</span>
+            </div>
+          </el-option>
+        </el-select>
 
-      <el-input
-        v-model="searchKeyword"
-        placeholder="探索感兴趣的科技灵感..."
-        class="search-input-right"
-        clearable
-        @keyup.enter="handleSearch"
-        @clear="handleSearch"
-      >
-        <template #prefix>
-          <el-icon><Search /></el-icon>
-        </template>
-        <template #append>
-          <el-button @click="handleSearch" class="search-btn">搜索</el-button>
-        </template>
-      </el-input>
+        <div class="category-display" v-if="selectedCategory !== null">
+          <el-tag closable @close="clearCategory" effect="plain" class="selected-category-tag">
+            {{ getCategoryLabel(selectedCategory) }}
+          </el-tag>
+        </div>
+
+        <el-input
+          v-model="searchKeyword"
+          placeholder="探索感兴趣的科技灵感..."
+          class="search-input-right"
+          clearable
+          @keyup.enter="handleSearch"
+          @clear="handleSearch"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+          <template #append>
+            <el-button @click="handleSearch" class="search-btn">搜索</el-button>
+          </template>
+        </el-input>
+      </div>
+
+      <!-- 局部侧边分类面板 -->
+      <transition name="panel-slide">
+        <div v-if="showCategoryDrawer" class="category-panel-local glass-effect">
+          <div class="panel-header">
+            <span>分类筛选</span>
+            <el-button link @click="showCategoryDrawer = false">
+              <el-icon><Close /></el-icon>
+            </el-button>
+          </div>
+          <div class="category-list-scroll">
+            <div 
+              class="category-item" 
+              :class="{ active: selectedCategory === null }"
+              @click="selectCategory(null)"
+            >
+              <el-icon><Menu /></el-icon>
+              <span>全部分类</span>
+            </div>
+            <div 
+              v-for="item in POST_CATEGORIES" 
+              :key="item.value" 
+              class="category-item"
+              :class="{ active: selectedCategory === item.value }"
+              @click="selectCategory(item.value)"
+            >
+              <span class="category-label">{{ item.label }}</span>
+              <el-icon v-if="selectedCategory === item.value" class="check-icon"><Check /></el-icon>
+            </div>
+          </div>
+        </div>
+      </transition>
     </div>
 
     <!-- 搜索结果数量显示 -->
@@ -98,6 +144,18 @@
               show-word-limit
               class="vibrant-input"
             />
+          </el-form-item>
+
+          <!-- 1.5 分类 -->
+          <el-form-item label="灵感分类" required>
+            <el-select v-model="newPost.category" placeholder="请选择分类" class="vibrant-select">
+              <el-option
+                v-for="item in POST_CATEGORIES"
+                :key="item.value"
+                :label="item.label"
+                :value="item.value"
+              />
+            </el-select>
           </el-form-item>
           
           <!-- 2. 内容 -->
@@ -162,7 +220,7 @@
         </div>
       </template>
     </el-dialog>
-    
+
     <!-- 帖子加载状态 -->
     <div v-if="loading" class="loading">
       <div class="spinner"></div>
@@ -201,6 +259,7 @@
           :comment-count="post.commentCount"
           :product-url="post.productUrl"
           :image-urls="post.imageUrls"
+          :category="post.category"
           :username="post.username"
           :avatar="post.avatar"
           @card-clicked="handleCardClicked"
@@ -229,6 +288,7 @@
           :comment-count="post.commentCount"
           :product-url="post.productUrl"
           :image-urls="post.imageUrls"
+          :category="post.category"
           :username="post.username"
           :avatar="post.avatar"
           @card-clicked="handleCardClicked"
@@ -255,11 +315,23 @@
         background
       />
     </div>
+
+    <!-- 置顶悬浮图标 -->
+    <transition name="fade">
+      <div 
+        v-show="showBackTop" 
+        class="back-to-top" 
+        @click="scrollToTop"
+        title="回到顶部"
+      >
+        <el-icon><ArrowUp /></el-icon>
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '@/stores/userStore';
 import { ElMessage } from 'element-plus';
@@ -273,10 +345,15 @@ import {
   CollectionTag, 
   Share,
   Plus,
-  Link as LinkIcon
+  Link as LinkIcon,
+  ArrowUp,
+  Check,
+  Menu,
+  Close
 } from '@element-plus/icons-vue';
 import PostCard from '@/components/forum/PostCard.vue';
 import Navigation from '@/components/home/Navigation.vue';
+import { POST_CATEGORIES, getCategoryLabel } from '@/constants/forumConstants';
 import {  getAllPosts, 
   createPost,
   likePost,
@@ -292,10 +369,13 @@ const loading = ref(true);
 const submitting = ref(false);
 const error = ref(null);
 const showNewPostForm = ref(false);
+const showCategoryDrawer = ref(false);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const sortMethod = ref('time');
+const lastSortMethod = ref('time');
 const searchKeyword = ref('');
+const selectedCategory = ref(null);
 const posts = ref([]);
 const leftColumnPosts = computed(() => posts.value.filter((_, index) => index % 2 === 0));
 const rightColumnPosts = computed(() => posts.value.filter((_, index) => index % 2 !== 0));
@@ -303,16 +383,33 @@ const newPost = ref({
   title: '', 
   content: '',
   productUrl: '',
-  imageUrls: [] 
+  imageUrls: [],
+  category: null,
+  visibility: 'PUBLIC'
 });
 const fileList = ref([]);
 const maxImages = 5;
 const totalPages = ref(1);
 const totalElements = ref(0);
+const showBackTop = ref(false);
 
 // Pinia store
 const userStore = useUserStore();
 const router = useRouter();
+
+// 处理滚动
+const handleScroll = () => {
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop;
+  showBackTop.value = scrollTop > 300;
+};
+
+// 回到顶部
+const scrollToTop = () => {
+  window.scrollTo({
+    top: 0,
+    behavior: 'smooth'
+  });
+};
 
 // 优化：统一API错误处理
 const handleApiError = (error, action) => {
@@ -343,6 +440,7 @@ const loadPosts = async () => {
     const response = await getAllPosts(
       sortMethod.value, 
       searchKeyword.value, 
+      selectedCategory.value,
       currentPage.value, 
       pageSize.value
     );
@@ -371,7 +469,35 @@ const handleSearch = () => {
 };
 
 // 处理排序变化
-const handleSortChange = () => {
+const handleSortChange = (val) => {
+  if (val === 'category_filter') {
+    // 如果选择了“按分类筛选”，打开抽屉并回退排序值
+    showCategoryDrawer.value = true;
+    sortMethod.value = lastSortMethod.value;
+    return;
+  }
+  lastSortMethod.value = val;
+  currentPage.value = 1;
+  loadPosts();
+};
+
+// 选择分类
+const selectCategory = (category) => {
+  selectedCategory.value = category;
+  showCategoryDrawer.value = false;
+  currentPage.value = 1;
+  loadPosts();
+};
+
+// 清除分类
+const clearCategory = () => {
+  selectedCategory.value = null;
+  currentPage.value = 1;
+  loadPosts();
+};
+
+// 处理分类变化 (旧方法保留或重命名)
+const handleCategoryChange = () => {
   currentPage.value = 1;
   loadPosts();
 };
@@ -436,7 +562,14 @@ const customUpload = (options) => {
 };
 
 const resetForm = () => {
-  newPost.value = { title: '', content: '', productUrl: '', imageUrls: [] };
+  newPost.value = {
+    title: '',
+    content: '',
+    productUrl: '',
+    imageUrls: [],
+    category: null,
+    visibility: 'PUBLIC'
+  };
   fileList.value = [];
 };
 
@@ -470,6 +603,10 @@ const submitPost = async () => {
     ElMessage.warning('请输入帖子内容');
     return;
   }
+  if (newPost.value.category === null || newPost.value.category === undefined) {
+    ElMessage.warning('请选择灵感分类');
+    return;
+  }
   
   try {
     submitting.value = true;
@@ -477,7 +614,8 @@ const submitPost = async () => {
       title: newPost.value.title.trim(),
       content: newPost.value.content.trim(),
       productUrl: newPost.value.productUrl ? newPost.value.productUrl.trim() : '',
-      imageUrls: newPost.value.imageUrls
+      imageUrls: newPost.value.imageUrls,
+      category: newPost.value.category
     });
     
     ElMessage.success('发布成功！');
@@ -547,7 +685,14 @@ const handlePageChange = (page) => {
 };
 
 // 组件挂载时加载数据
-onMounted(loadPosts);
+onMounted(() => {
+  loadPosts();
+  window.addEventListener('scroll', handleScroll);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll);
+});
 </script>
 
 <style scoped>
@@ -607,18 +752,24 @@ onMounted(loadPosts);
   box-shadow: 0 8px 25px rgba(59, 130, 246, 0.5);
 }
 
+/* 搜索区域容器 */
+.search-section-container {
+  max-width: 1200px;
+  margin: 0 auto 16px;
+  position: relative;
+  z-index: 100;
+}
+
 /* 搜索栏 - 彻底去除内部边框，实现平整平铺 */
 .search-bar-inner {
   display: flex;
   align-items: stretch; /* 强制子元素高度拉伸一致 */
   gap: 0;
-  max-width: 1200px;
-  margin: 0 auto 16px;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-radius: 18px;
-  overflow: hidden;
+  overflow: visible; /* 允许局部面板显示在右侧 */
   border: 1px solid rgba(0, 0, 0, 0.1);
   box-shadow: 0 12px 40px rgba(31, 38, 135, 0.08);
   height: 60px;
@@ -626,8 +777,23 @@ onMounted(loadPosts);
 }
 
 .sort-select-left {
-  width: 150px;
-  height: 100%; /* 占据容器全部高度 */
+  width: 130px;
+  height: 100%;
+}
+
+.category-display {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-left: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.selected-category-tag {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  font-weight: 500;
+  border-radius: 6px;
 }
 
 /* 彻底去除选择框内部边框，确保文字可见 */
@@ -636,7 +802,7 @@ onMounted(loadPosts);
   box-shadow: none !important;
   border: none !important;
   background-color: transparent !important;
-  height: 60px !important; /* 恢复固定高度确保文字对齐 */
+  height: 60px !important;
   padding: 0 16px;
   display: flex;
   align-items: center;
@@ -667,13 +833,14 @@ onMounted(loadPosts);
 .sort-select-left :deep(.el-select__placeholder) {
   font-weight: 600;
   color: #1e293b !important;
-  height: auto !important; /* 让文字高度自适应 */
-  line-height: 60px !important; /* 用行高撑起并居中文字 */
+  height: auto !important;
+  line-height: 60px !important;
 }
 
 .search-input-right {
   flex: 1;
   height: 100%;
+  margin-left: 0;
 }
 
 /* 搜索输入框文字对齐 */
@@ -727,11 +894,107 @@ onMounted(loadPosts);
   box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.1);
 }
 
+/* 局部侧边分类面板 */
+.category-panel-local {
+  width: 260px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  max-height: 480px;
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  left: 130px; /* 紧贴排序下拉框(130px宽)的右侧 */
+  margin-left: 8px;
+  top: 0;
+  z-index: 110;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 0 8px;
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 16px;
+}
+
+.category-list-scroll {
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 4px;
+}
+
+/* 滚动条美化 */
+.category-list-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.category-list-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+}
+
+.category-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  margin-bottom: 4px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.category-item:hover {
+  background: rgba(59, 130, 246, 0.05);
+  color: #3b82f6;
+}
+
+.category-item.active {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.category-item .el-icon {
+  font-size: 16px;
+  margin-right: 8px;
+}
+
+.check-icon {
+  margin-right: 0 !important;
+  color: #3b82f6;
+}
+
+/* 动画效果 */
+.panel-slide-enter-active,
+.panel-slide-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.panel-slide-enter-from,
+.panel-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
 .option-item {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 4px 0;
+}
+
+.option-item .el-icon {
+  font-size: 16px;
 }
 
 
@@ -1037,6 +1300,54 @@ onMounted(loadPosts);
 
 .publish-btn:active {
   transform: translateY(0);
+}
+
+/* 置顶悬浮图标样式 */
+.back-to-top {
+  position: fixed;
+  right: 60px;
+  bottom: 100px;
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+  z-index: 9999 !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.back-to-top:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.5);
+}
+
+/* 渐变动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .back-to-top {
+    right: 30px;
+    bottom: 80px;
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
 }
 
 /* 移除旧的对话框布局样式 */

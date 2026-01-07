@@ -10,7 +10,7 @@ public interface ForumService {
 
     Boolean deletePost(Long postId);
 
-    Page<PostSimpleVo> getAllPosts(String token, String sort, String keyword, int page, int size);
+    Page<PostSimpleVo> getAllPosts(String token, String sort, String keyword, Integer category, int page, int size);
     
     Page<PostSimpleVo> getCollectedPosts(String token, int page, int size);
 

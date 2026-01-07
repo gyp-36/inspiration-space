@@ -6,9 +6,6 @@
       <div class="session-info">
         <div class="session-avatar">
           <img :src="sessionAvatar" :alt="sessionName" @error="handleAvatarError" />
-          <div v-if="session.unreadCount > 0" class="unread-badge">
-            {{ session.unreadCount > 99 ? '99+' : session.unreadCount }}
-          </div>
         </div>
         <div class="session-details">
           <div class="session-name">
@@ -100,80 +97,82 @@
           <span>加载更多消息</span>
         </div>
         
-        <div v-for="(message, index) in messages" :key="message.messageId || index" class="message-item">
-          <!-- 时间分隔符 -->
-          <div v-if="shouldShowTimeDivider(message, messages[index - 1])" class="time-divider">
-            <span>{{ formatMessageTime(message.sentAt || message.timestamp) }}</span>
-          </div>
-          
-          <!-- 系统消息 -->
-          <div v-if="isSystemMessage(message)" class="system-message">
-            <span>{{ message.content }}</span>
-          </div>
-          
-          <!-- 普通消息 -->
-          <div v-else :class="['message-wrapper', isOwnMessage(message) ? 'own-message' : 'other-message']" :data-message-id="message.messageId">
-            <div class="message-avatar" v-if="!isOwnMessage(message)">
-              <img :src="getSenderAvatar(message.senderId)" :alt="getSenderName(message.senderId)" @error="handleAvatarError" />
+        <transition-group name="message-pop">
+          <div v-for="(message, index) in messages" :key="message.messageId || index" class="message-item">
+            <!-- 时间分隔符 -->
+            <div v-if="shouldShowTimeDivider(message, messages[index - 1])" class="time-divider">
+              <span>{{ formatMessageTime(message.sentAt || message.timestamp) }}</span>
             </div>
             
-            <div class="message-content-wrapper">
-              <div class="sender-name" v-if="session.sessionType === 'GROUP' && !isOwnMessage(message)">
-                {{ getSenderName(message.senderId) }}
+            <!-- 系统消息 -->
+            <div v-if="isSystemMessage(message)" class="system-message">
+              <span>{{ message.content }}</span>
+            </div>
+            
+            <!-- 普通消息 -->
+            <div v-else :class="['message-wrapper', isOwnMessage(message) ? 'own-message' : 'other-message']" :data-message-id="message.messageId">
+              <div class="message-avatar" v-if="!isOwnMessage(message)">
+                <img :src="getSenderAvatar(message.senderId)" :alt="getSenderName(message.senderId)" @error="handleAvatarError" />
               </div>
               
-              <div class="message-bubble" :class="getMessageContentClass(message)">
-                <!-- 文本消息 -->
-                <div v-if="message.msgType === 'TEXT'" class="text-message">
-                  {{ message.content }}
+              <div class="message-content-wrapper">
+                <div class="sender-name" v-if="session.sessionType === 'GROUP' && !isOwnMessage(message)">
+                  {{ getSenderName(message.senderId) }}
                 </div>
                 
-                <!-- 图片消息 -->
-                <div v-else-if="message.msgType === 'IMAGE'" class="image-message">
-                  <el-image 
-                    :src="message.content" 
-                    :preview-src-list="[message.content]"
-                    fit="cover"
-                    class="chat-image"
-                  />
-                </div>
-                
-                <!-- 文件消息 -->
-                <div v-else-if="message.msgType === 'FILE'" class="file-message">
-                  <div class="file-icon">
-                    <el-icon><Document /></el-icon>
+                <div class="message-bubble" :class="getMessageContentClass(message)">
+                  <!-- 文本消息 -->
+                  <div v-if="message.msgType === 'TEXT'" class="text-message">
+                    {{ message.content }}
                   </div>
-                  <div class="file-info">
-                    <div class="file-name">{{ getFileName(message.content) }}</div>
-                    <div class="file-size">{{ getFileSize(message.fileSize) }}</div>
+                  
+                  <!-- 图片消息 -->
+                  <div v-else-if="message.msgType === 'IMAGE'" class="image-message">
+                    <el-image 
+                      :src="message.content" 
+                      :preview-src-list="[message.content]"
+                      fit="cover"
+                      class="chat-image"
+                    />
                   </div>
-                  <el-button link type="primary" :icon="Download" @click="downloadFile(message.content)"></el-button>
-                </div>
-                
-                <!-- 撤回消息 -->
-                <div v-else-if="message.msgType === 'RECALL'" class="recall-message">
-                  <el-icon><RefreshLeft /></el-icon>
-                  <span>{{ message.content }}</span>
-                </div>
+                  
+                  <!-- 文件消息 -->
+                  <div v-else-if="message.msgType === 'FILE'" class="file-message">
+                    <div class="file-icon">
+                      <el-icon><Document /></el-icon>
+                    </div>
+                    <div class="file-info">
+                      <div class="file-name">{{ getFileName(message.content) }}</div>
+                      <div class="file-size">{{ getFileSize(message.fileSize) }}</div>
+                    </div>
+                    <el-button link type="primary" :icon="Download" @click="downloadFile(message.content)"></el-button>
+                  </div>
+                  
+                  <!-- 撤回消息 -->
+                  <div v-else-if="message.msgType === 'RECALL'" class="recall-message">
+                    <el-icon><RefreshLeft /></el-icon>
+                    <span>{{ message.content }}</span>
+                  </div>
 
-                <!-- 消息状态和时间 -->
-                <div class="message-meta">
-                  <span class="message-time-small">{{ formatTimeSmall(message.sentAt || message.timestamp) }}</span>
-                  <div class="status-icons" v-if="isOwnMessage(message)">
-                    <el-icon v-if="message.status === 'SENDING'" class="is-loading"><Loading /></el-icon>
-                    <el-icon v-else-if="message.status === 'FAILED'" class="status-error"><Warning /></el-icon>
-                    <el-icon v-else-if="message.isRead" class="status-read"><Check /></el-icon>
-                    <el-icon v-else><Check /></el-icon>
+                  <!-- 消息状态和时间 -->
+                  <div class="message-meta">
+                    <span class="message-time-small">{{ formatTimeSmall(message.sentAt || message.timestamp) }}</span>
+                    <div class="status-icons" v-if="isOwnMessage(message)">
+                      <el-icon v-if="message.status === 'SENDING'" class="is-loading"><Loading /></el-icon>
+                      <el-icon v-else-if="message.status === 'FAILED'" class="status-error"><Warning /></el-icon>
+                      <el-icon v-else-if="message.isRead" class="status-read"><Check /></el-icon>
+                      <el-icon v-else><Check /></el-icon>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-            
-            <div class="message-avatar" v-if="isOwnMessage(message)">
-              <img :src="currentUserAvatar" alt="我" @error="handleAvatarError" />
+              
+              <div class="message-avatar" v-if="isOwnMessage(message)">
+                <img :src="currentUserAvatar" alt="我" @error="handleAvatarError" />
+              </div>
             </div>
           </div>
-        </div>
+        </transition-group>
       </div>
     </div>
 
@@ -415,10 +414,8 @@ const jumpToMessage = (msg) => {
 const scrollToBottom = async () => {
   await nextTick()
   if (messageContainer.value) {
-    const lastMessage = messageContainer.value.querySelector('.message-item:last-child')
-    if (lastMessage) {
-      lastMessage.scrollIntoView({ behavior: 'smooth', block: 'end' })
-    }
+    // 立即滚动到底部
+    messageContainer.value.scrollTop = messageContainer.value.scrollHeight
   }
 }
 
@@ -741,6 +738,20 @@ onMounted(scrollToBottom)
 }
 
 /* 聊天图片 */
+/* 消息弹出动画 */
+.message-pop-enter-active {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.message-pop-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+}
+
+.message-pop-move {
+  transition: transform 0.3s ease;
+}
+
 .chat-image {
   border-radius: 12px;
   display: block;

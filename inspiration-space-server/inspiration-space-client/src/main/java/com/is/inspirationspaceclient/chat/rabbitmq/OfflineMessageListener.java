@@ -44,7 +44,7 @@ public class OfflineMessageListener {
      * 监听离线消息队列
      * 根据RabbitMQ配置，监听 offline.* 路由键模式的消息
      */
-    @RabbitListener(queues = "chat.offline")
+    @RabbitListener(queues = "chat.offline_queue")
     public void handleOfflineMessage(ChatMessage chatMessage) {
         try {
             // 从消息中提取接收者ID

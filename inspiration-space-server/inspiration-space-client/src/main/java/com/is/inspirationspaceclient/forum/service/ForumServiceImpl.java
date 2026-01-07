@@ -159,11 +159,11 @@ public class ForumServiceImpl implements ForumService {
 
 
     @Override
-    public Page<PostSimpleVo> getAllPosts(String token, String sort, String keyword, int page, int size) {
+    public Page<PostSimpleVo> getAllPosts(String token, String sort, String keyword, Integer category, int page, int size) {
         Page<PostSimpleVo> pageObj = new Page<>(page, size);
         String orderByColumn = getOrderByColumn(sort);
 
-        Page<PostSimpleVo> postsPage = forumPostsMapper.selectPostsWithStats(pageObj, orderByColumn, keyword);
+        Page<PostSimpleVo> postsPage = forumPostsMapper.selectPostsWithStats(pageObj, orderByColumn, keyword, category);
 
         // 1. 批量获取帖子实体以正确解析 JSON 格式的 imageUrls
         List<Long> postIds = postsPage.getRecords().stream()

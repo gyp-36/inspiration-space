@@ -3,7 +3,7 @@ spring:
     name: inspiration-space
 
   profiles:
-    active: dev
+    active: dev # 部署时修改为 prod
   web:
     resources:
       add-mappings: false

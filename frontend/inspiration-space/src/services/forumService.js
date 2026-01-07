@@ -1,10 +1,13 @@
 import { publicApiCall, privateApiCall } from './apiClient';
 
 // 公共操作
-export const getAllPosts = (sort = 'time', keyword = '', page = 1, size = 10) => {
+export const getAllPosts = (sort = 'time', keyword = '', category = null, page = 1, size = 10) => {
   const params = new URLSearchParams({ sort, page, size });
   if (keyword) {
     params.append('keyword', keyword);
+  }
+  if (category !== null && category !== undefined) {
+    params.append('category', category);
   }
   return publicApiCall(`/forum/getAll?${params.toString()}`, 'GET');
 };

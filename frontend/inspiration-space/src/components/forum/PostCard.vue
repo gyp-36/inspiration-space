@@ -25,6 +25,10 @@
           <span class="publish-time">{{ formattedDate }}</span>
         </div>
       </div>
+      <!-- 分类标签 -->
+      <div v-if="category !== null && category !== undefined" class="category-tag">
+        {{ categoryLabel }}
+      </div>
     </div>
 
     <!-- 中部内容区：标题 + 内容 + 图片 + 链接 -->
@@ -110,6 +114,7 @@
 <script setup>
 import { computed, ref, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { getCategoryLabel } from '@/constants/forumConstants';
 import { 
   likePost, 
   unlikePost, 
@@ -155,6 +160,10 @@ const props = defineProps({
   productUrl: {
     type: String,
     default: ''
+  },
+  category: {
+    type: [Number, Object, String],
+    default: null
   },
   createAt: {
     type: [Date, String],
@@ -276,12 +285,25 @@ const localIsFavorited = ref(props.isFavorited);
 const localShares = ref(props.repost);
 const localIsReposted = ref(props.isReposted);
 
+const categoryLabel = computed(() => getCategoryLabel(props.category));
+
 // 计算属性 - 格式化日期
 const formattedDate = computed(() => {
   if (!props.createAt) return '未知日期';
   const date = typeof props.createAt === 'string' ? new Date(props.createAt) : props.createAt;
   if (!date || isNaN(date.getTime())) return '无效日期';
-  
+
+  const now = new Date();
+  const diff = now - date;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diff < minute) return '刚刚';
+  if (diff < hour) return Math.floor(diff / minute) + '分钟前';
+  if (diff < day) return Math.floor(diff / hour) + '小时前';
+  if (diff < day * 3) return Math.floor(diff / day) + '天前';
+
   return date.toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: 'short',
@@ -465,7 +487,19 @@ const handleCardClick = (e) => {
 
 /* 头部布局：头像左上，名时右侧 */
 .card-header {
-  /* 移除 margin-bottom，由父级 gap 控制 */
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.category-tag {
+  font-size: 10px;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  border: 1px solid rgba(59, 130, 246, 0.2);
 }
 
 .user-info {
